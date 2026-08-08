@@ -26,6 +26,7 @@ juce_add_plugin(Parity
 target_sources(Parity PRIVATE
     source/PluginProcessor.cpp
     source/PluginEditor.cpp
+    source/Audio/ReferencePlayer.cpp
 )
 
 target_include_directories(Parity PUBLIC source)
