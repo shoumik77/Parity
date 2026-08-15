@@ -90,6 +90,9 @@ void ParityAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     referenceBuffer.setSize (2, samplesPerBlock);
     referenceGain.reset (sampleRate, 0.02); // 20 ms ramp to avoid clicks on toggle
     referenceGain.setCurrentAndTargetValue (referenceActive.load() ? 1.0f : 0.0f);
+
+    mixLoudness.prepare (sampleRate, samplesPerBlock);
+    referenceLoudness.prepare (sampleRate, samplesPerBlock);
 }
 
 void ParityAudioProcessor::releaseResources()
@@ -154,14 +157,33 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    // Measure the mix input while the host is playing (pre-crossfade so the
+    // reading always reflects the actual mix, not what's being monitored).
+    if (hostIsPlaying)
+        mixLoudness.process (buffer);
+
+    // Render the reference whenever a file is loaded so its meters stay live
+    // even while listening to the mix.
+    const auto referenceRendered = referencePlayer.hasFileLoaded() && hostIsPlaying;
+
+    if (referenceRendered)
+    {
+        referenceBuffer.setSize (buffer.getNumChannels(), numSamples, false, false, true);
+        referencePlayer.process (referenceBuffer, playheadSeconds, hostSampleRate, true);
+        referenceLoudness.process (referenceBuffer);
+    }
+
     referenceGain.setTargetValue (referenceActive.load() && referencePlayer.hasFileLoaded() ? 1.0f : 0.0f);
 
-    // Skip reference rendering entirely while fully faded out.
+    // Skip the crossfade entirely while fully faded out.
     if (referenceGain.getCurrentValue() <= 0.0f && ! referenceGain.isSmoothing())
         return;
 
-    referenceBuffer.setSize (buffer.getNumChannels(), numSamples, false, false, true);
-    referencePlayer.process (referenceBuffer, playheadSeconds, hostSampleRate, hostIsPlaying);
+    if (! referenceRendered)
+    {
+        referenceBuffer.setSize (buffer.getNumChannels(), numSamples, false, false, true);
+        referenceBuffer.clear();
+    }
 
     // Crossfade: gain -> reference, (1 - gain) -> mix.
     for (int i = 0; i < numSamples; ++i)
@@ -215,7 +237,17 @@ void ParityAudioProcessor::setStateInformation (const void* data, int sizeInByte
 
 bool ParityAudioProcessor::loadReferenceFile (const juce::File& file)
 {
-    return referencePlayer.loadFile (file);
+    if (! referencePlayer.loadFile (file))
+        return false;
+
+    referencePlayer.withLoadedAudio ([this] (const juce::AudioBuffer<float>& audio, double sampleRate)
+    {
+        const auto stats = LoudnessAnalyzer::analyzeBuffer (audio, sampleRate);
+        referenceFileLufs.store (stats.integratedLufs);
+        referenceFilePeak.store (stats.peakDb);
+    });
+
+    return true;
 }
 
 //==============================================================================

@@ -26,6 +26,7 @@ juce_add_plugin(Parity
 target_sources(Parity PRIVATE
     source/PluginProcessor.cpp
     source/PluginEditor.cpp
+    source/Audio/LoudnessAnalyzer.cpp
     source/Audio/ReferencePlayer.cpp
 )
 
@@ -42,4 +43,16 @@ target_link_libraries(Parity PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
+)
+
+juce_add_console_app(LoudnessSanityTest PRODUCT_NAME "LoudnessSanityTest")
+
+target_sources(LoudnessSanityTest PRIVATE
+    Tests/LoudnessSanityTest.cpp
+    source/Audio/LoudnessAnalyzer.cpp
+)
+
+target_link_libraries(LoudnessSanityTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
 )

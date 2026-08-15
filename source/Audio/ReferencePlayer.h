@@ -2,6 +2,8 @@
 
 #include <juce_audio_formats/juce_audio_formats.h>
 
+#include <functional>
+
 //==============================================================================
 /**
     Loads a reference audio file into memory and renders it synced to the
@@ -26,6 +28,14 @@ public:
 
     /** Returns a wildcard pattern of supported formats for use with a FileChooser. */
     juce::String getWildcardPattern() const  { return formatManager.getWildcardForAllFormats(); }
+
+    /** Calls fn (audio, sampleRate) with the currently loaded audio, if any.
+        Message thread only. */
+    void withLoadedAudio (const std::function<void (const juce::AudioBuffer<float>&, double)>& fn) const
+    {
+        if (auto f = std::atomic_load (&loadedFile))
+            fn (f->audio, f->sampleRate);
+    }
 
     /** Renders the reference into the buffer (replacing its contents), reading
         from the file position corresponding to the host playhead time.

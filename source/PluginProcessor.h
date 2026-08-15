@@ -2,6 +2,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "Audio/LoudnessAnalyzer.h"
 #include "Audio/ReferencePlayer.h"
 
 //==============================================================================
@@ -53,10 +54,23 @@ public:
     void setReferenceActive (bool shouldBeActive) noexcept  { referenceActive.store (shouldBeActive); }
     bool isReferenceActive() const noexcept                 { return referenceActive.load(); }
 
+    const LoudnessAnalyzer& getMixLoudness() const noexcept        { return mixLoudness; }
+    const LoudnessAnalyzer& getReferenceLoudness() const noexcept  { return referenceLoudness; }
+
+    /** Full-file stats computed offline when the reference was loaded. */
+    LoudnessAnalyzer::Stats getReferenceFileStats() const noexcept
+    {
+        return { referenceFileLufs.load(), referenceFilePeak.load() };
+    }
+
 private:
     //==============================================================================
     ReferencePlayer referencePlayer;
     std::atomic<bool> referenceActive { false };
+
+    LoudnessAnalyzer mixLoudness, referenceLoudness;
+    std::atomic<float> referenceFileLufs { LoudnessAnalyzer::silenceLufs };
+    std::atomic<float> referenceFilePeak { LoudnessAnalyzer::silenceLufs };
 
     juce::AudioBuffer<float> referenceBuffer;
     juce::SmoothedValue<float> referenceGain { 0.0f };
