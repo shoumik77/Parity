@@ -28,8 +28,10 @@ target_sources(Parity PRIVATE
     source/PluginEditor.cpp
     source/Audio/LoudnessAnalyzer.cpp
     source/Audio/ReferencePlayer.cpp
+    source/Audio/SpectrumAnalyzer.cpp
     source/UI/ABSwitch.cpp
     source/UI/ParityLookAndFeel.cpp
+    source/UI/SpectrumView.cpp
 )
 
 target_include_directories(Parity PUBLIC source)
@@ -42,6 +44,7 @@ target_compile_definitions(Parity PUBLIC
 
 target_link_libraries(Parity PRIVATE
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags

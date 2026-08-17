@@ -3,6 +3,7 @@
 #include "PluginProcessor.h"
 #include "UI/ABSwitch.h"
 #include "UI/ParityLookAndFeel.h"
+#include "UI/SpectrumView.h"
 
 //==============================================================================
 class ParityAudioProcessorEditor final : public juce::AudioProcessorEditor,
@@ -32,6 +33,12 @@ private:
     juce::TextButton loadButton { "LOAD REFERENCE" };
     juce::Label fileLabel;
     ABSwitch abSwitch;
+
+    juce::Label spectrumSectionLabel;
+    SpectrumView spectrumView;
+    juce::TextButton overlayButton { "OVERLAY" }, differenceButton { "DIFF" };
+    juce::TextButton realtimeButton { "RT" }, averageButton { "AVG" };
+
     juce::Label loudnessSectionLabel;
 
     static constexpr int numLoudnessRows = 4; // momentary, short-term, integrated, peak

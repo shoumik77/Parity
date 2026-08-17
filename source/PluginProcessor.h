@@ -4,6 +4,7 @@
 
 #include "Audio/LoudnessAnalyzer.h"
 #include "Audio/ReferencePlayer.h"
+#include "Audio/SpectrumAnalyzer.h"
 
 //==============================================================================
 class ParityAudioProcessor final : public juce::AudioProcessor
@@ -57,6 +58,9 @@ public:
     const LoudnessAnalyzer& getMixLoudness() const noexcept        { return mixLoudness; }
     const LoudnessAnalyzer& getReferenceLoudness() const noexcept  { return referenceLoudness; }
 
+    SpectrumAnalyzer& getMixSpectrum() noexcept                    { return mixSpectrum; }
+    SpectrumAnalyzer& getReferenceSpectrum() noexcept              { return referenceSpectrum; }
+
     /** Full-file stats computed offline when the reference was loaded. */
     LoudnessAnalyzer::Stats getReferenceFileStats() const noexcept
     {
@@ -69,6 +73,7 @@ private:
     std::atomic<bool> referenceActive { false };
 
     LoudnessAnalyzer mixLoudness, referenceLoudness;
+    SpectrumAnalyzer mixSpectrum, referenceSpectrum;
     std::atomic<float> referenceFileLufs { LoudnessAnalyzer::silenceLufs };
     std::atomic<float> referenceFilePeak { LoudnessAnalyzer::silenceLufs };
 

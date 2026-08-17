@@ -3,7 +3,8 @@
 
 //==============================================================================
 ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p)
+    : AudioProcessorEditor (&p), processorRef (p),
+      spectrumView (p.getMixSpectrum(), p.getReferenceSpectrum())
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -28,6 +29,34 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
         processorRef.setReferenceActive (refActive);
     };
     addAndMakeVisible (abSwitch);
+
+    spectrumSectionLabel.setText ("SPECTRUM", juce::dontSendNotification);
+    spectrumSectionLabel.setFont (ParityLookAndFeel::getLabelFont (12.0f));
+    spectrumSectionLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
+    addAndMakeVisible (spectrumSectionLabel);
+
+    addAndMakeVisible (spectrumView);
+
+    auto setUpModePair = [this] (juce::TextButton& first, juce::TextButton& second, int radioGroup)
+    {
+        for (auto* button : { &first, &second })
+        {
+            button->setRadioGroupId (radioGroup);
+            button->setClickingTogglesState (true);
+            addAndMakeVisible (*button);
+        }
+    };
+
+    setUpModePair (overlayButton, differenceButton, 1001);
+    setUpModePair (realtimeButton, averageButton, 1002);
+
+    overlayButton.setToggleState (true, juce::dontSendNotification);
+    realtimeButton.setToggleState (true, juce::dontSendNotification);
+
+    overlayButton.onClick = [this] { spectrumView.setDisplay (SpectrumView::Display::overlay); };
+    differenceButton.onClick = [this] { spectrumView.setDisplay (SpectrumView::Display::difference); };
+    realtimeButton.onClick = [this] { spectrumView.setAveraging (false); };
+    averageButton.onClick = [this] { spectrumView.setAveraging (true); };
 
     loudnessSectionLabel.setText ("LOUDNESS", juce::dontSendNotification);
     loudnessSectionLabel.setFont (ParityLookAndFeel::getLabelFont (12.0f));
@@ -67,8 +96,8 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     startTimerHz (10);
 
     setResizable (true, true);
-    setResizeLimits (420, 340, 880, 680);
-    setSize (460, 380);
+    setResizeLimits (560, 480, 1100, 820);
+    setSize (700, 540);
 }
 
 ParityAudioProcessorEditor::~ParityAudioProcessorEditor()
@@ -113,19 +142,36 @@ void ParityAudioProcessorEditor::resized()
     area.removeFromTop (20);
 
     // The centerpiece A/B switch.
-    abSwitch.setBounds (area.removeFromTop (56));
-    area.removeFromTop (20);
+    abSwitch.setBounds (area.removeFromTop (48));
+    area.removeFromTop (16);
 
-    loudnessSectionLabel.setBounds (area.removeFromTop (18));
+    // Spectrum section: label + mode buttons on one strip, view below.
+    auto spectrumStrip = area.removeFromTop (22);
+    spectrumSectionLabel.setBounds (spectrumStrip.removeFromLeft (110));
+    averageButton.setBounds (spectrumStrip.removeFromRight (46));
+    realtimeButton.setBounds (spectrumStrip.removeFromRight (46));
+    spectrumStrip.removeFromRight (12);
+    differenceButton.setBounds (spectrumStrip.removeFromRight (52));
+    overlayButton.setBounds (spectrumStrip.removeFromRight (74));
     area.removeFromTop (6);
 
-    // Loudness table.
-    tableArea = area;
-    const auto rowHeight = area.getHeight() / (numLoudnessRows + 1);
-    const auto nameWidth = juce::jmax (100, area.getWidth() / 4);
-    const auto valueWidth = (area.getWidth() - nameWidth) / 3;
+    // Fixed-height loudness table at the bottom; spectrum takes the rest.
+    constexpr int tableHeight = 5 * 24;
+    auto tableSection = area.removeFromBottom (tableHeight + 24 + 6);
 
-    auto headerRow = area.removeFromTop (rowHeight);
+    spectrumView.setBounds (area.reduced (0, 0).withTrimmedBottom (16));
+
+    loudnessSectionLabel.setBounds (tableSection.removeFromTop (18));
+    tableSection.removeFromTop (6);
+
+    // Loudness table.
+    tableArea = tableSection;
+    auto tableRows = tableSection;
+    const auto rowHeight = tableRows.getHeight() / (numLoudnessRows + 1);
+    const auto nameWidth = juce::jmax (100, tableRows.getWidth() / 4);
+    const auto valueWidth = (tableRows.getWidth() - nameWidth) / 3;
+
+    auto headerRow = tableRows.removeFromTop (rowHeight);
     headerRow.removeFromLeft (nameWidth);
     mixHeader.setBounds (headerRow.removeFromLeft (valueWidth));
     refHeader.setBounds (headerRow.removeFromLeft (valueWidth));
@@ -133,7 +179,7 @@ void ParityAudioProcessorEditor::resized()
 
     for (int row = 0; row < numLoudnessRows; ++row)
     {
-        auto rowArea = area.removeFromTop (rowHeight);
+        auto rowArea = tableRows.removeFromTop (rowHeight);
         rowLabels[(size_t) row].setBounds (rowArea.removeFromLeft (nameWidth));
         mixValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (valueWidth));
         refValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (valueWidth));
