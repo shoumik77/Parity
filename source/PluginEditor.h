@@ -1,6 +1,8 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "UI/ABSwitch.h"
+#include "UI/ParityLookAndFeel.h"
 
 //==============================================================================
 class ParityAudioProcessorEditor final : public juce::AudioProcessorEditor,
@@ -24,14 +26,20 @@ private:
     // access the processor object that created it.
     ParityAudioProcessor& processorRef;
 
-    juce::TextButton loadButton { "Load Reference..." };
+    ParityLookAndFeel lookAndFeel;
+
+    juce::Label titleLabel;
+    juce::TextButton loadButton { "LOAD REFERENCE" };
     juce::Label fileLabel;
-    juce::ToggleButton referenceToggle { "Reference" };
+    ABSwitch abSwitch;
+    juce::Label loudnessSectionLabel;
 
     static constexpr int numLoudnessRows = 4; // momentary, short-term, integrated, peak
     std::array<juce::Label, numLoudnessRows> rowLabels;
     std::array<juce::Label, numLoudnessRows> mixValueLabels, refValueLabels, deltaLabels;
     juce::Label mixHeader, refHeader, deltaHeader;
+
+    juce::Rectangle<int> tableArea; // for painting row rules
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

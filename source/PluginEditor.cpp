@@ -5,75 +5,127 @@
 ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p)
 {
+    setLookAndFeel (&lookAndFeel);
+
+    titleLabel.setText ("PARITY", juce::dontSendNotification);
+    titleLabel.setFont (ParityLookAndFeel::getLabelFont (22.0f).boldened());
+    titleLabel.setJustificationType (juce::Justification::centredLeft);
+    addAndMakeVisible (titleLabel);
+
     addAndMakeVisible (loadButton);
     loadButton.onClick = [this] { loadButtonClicked(); };
 
+    fileLabel.setJustificationType (juce::Justification::centredRight);
+    fileLabel.setFont (ParityLookAndFeel::getMonoFont (13.0f));
+    fileLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
     addAndMakeVisible (fileLabel);
-    fileLabel.setJustificationType (juce::Justification::centredLeft);
     updateFileLabel();
 
-    addAndMakeVisible (referenceToggle);
-    referenceToggle.setToggleState (processorRef.isReferenceActive(), juce::dontSendNotification);
-    referenceToggle.onClick = [this]
+    abSwitch.setEnabledForReference (processorRef.getReferencePlayer().hasFileLoaded());
+    abSwitch.setReferenceActive (processorRef.isReferenceActive(), juce::dontSendNotification);
+    abSwitch.onChange = [this] (bool refActive)
     {
-        processorRef.setReferenceActive (referenceToggle.getToggleState());
+        processorRef.setReferenceActive (refActive);
     };
+    addAndMakeVisible (abSwitch);
+
+    loudnessSectionLabel.setText ("LOUDNESS", juce::dontSendNotification);
+    loudnessSectionLabel.setFont (ParityLookAndFeel::getLabelFont (12.0f));
+    loudnessSectionLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
+    addAndMakeVisible (loudnessSectionLabel);
 
     const char* rowNames[numLoudnessRows] = { "Momentary", "Short-term", "Integrated", "Peak" };
 
     for (int row = 0; row < numLoudnessRows; ++row)
     {
-        rowLabels[(size_t) row].setText (rowNames[row], juce::dontSendNotification);
-        addAndMakeVisible (rowLabels[(size_t) row]);
+        auto& name = rowLabels[(size_t) row];
+        name.setText (rowNames[row], juce::dontSendNotification);
+        name.setFont (ParityLookAndFeel::getLabelFont (14.0f));
+        addAndMakeVisible (name);
 
         for (auto* label : { &mixValueLabels[(size_t) row], &refValueLabels[(size_t) row], &deltaLabels[(size_t) row] })
         {
             label->setJustificationType (juce::Justification::centredRight);
+            label->setFont (ParityLookAndFeel::getMonoFont (14.0f));
             addAndMakeVisible (*label);
         }
     }
 
-    mixHeader.setText ("Mix", juce::dontSendNotification);
-    refHeader.setText ("Reference", juce::dontSendNotification);
-    deltaHeader.setText ("Delta", juce::dontSendNotification);
+    mixHeader.setText ("MIX", juce::dontSendNotification);
+    refHeader.setText ("REF", juce::dontSendNotification);
+    deltaHeader.setText ("DELTA", juce::dontSendNotification);
 
     for (auto* header : { &mixHeader, &refHeader, &deltaHeader })
     {
         header->setJustificationType (juce::Justification::centredRight);
+        header->setFont (ParityLookAndFeel::getLabelFont (12.0f));
+        header->setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
         addAndMakeVisible (*header);
     }
 
     updateLoudnessLabels();
     startTimerHz (10);
 
-    setSize (440, 320);
+    setResizable (true, true);
+    setResizeLimits (420, 340, 880, 680);
+    setSize (460, 380);
 }
 
 ParityAudioProcessorEditor::~ParityAudioProcessorEditor()
 {
+    setLookAndFeel (nullptr);
 }
 
 //==============================================================================
 void ParityAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll (ParityLookAndFeel::cream);
+
+    g.setColour (ParityLookAndFeel::panelLine);
+
+    // Rule under the header strip.
+    const auto headerBottom = titleLabel.getBottom() + 10;
+    g.drawHorizontalLine (headerBottom, 16.0f, (float) getWidth() - 16.0f);
+
+    // Rules between table rows.
+    if (! tableArea.isEmpty())
+    {
+        const auto rowHeight = tableArea.getHeight() / (numLoudnessRows + 1);
+
+        for (int row = 0; row <= numLoudnessRows; ++row)
+        {
+            const auto y = tableArea.getY() + rowHeight * (row + 1);
+            g.drawHorizontalLine (y, (float) tableArea.getX(), (float) tableArea.getRight());
+        }
+    }
 }
 
 void ParityAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced (16);
 
-    loadButton.setBounds (area.removeFromTop (32));
-    area.removeFromTop (8);
-    fileLabel.setBounds (area.removeFromTop (24));
-    area.removeFromTop (8);
-    referenceToggle.setBounds (area.removeFromTop (28));
-    area.removeFromTop (12);
+    // Header strip: wordmark left, load button + file name right.
+    auto header = area.removeFromTop (32);
+    titleLabel.setBounds (header.removeFromLeft (110));
+    loadButton.setBounds (header.removeFromRight (150).reduced (0, 2));
+    header.removeFromRight (10);
+    fileLabel.setBounds (header);
+    area.removeFromTop (20);
 
-    const auto nameWidth = 100;
+    // The centerpiece A/B switch.
+    abSwitch.setBounds (area.removeFromTop (56));
+    area.removeFromTop (20);
+
+    loudnessSectionLabel.setBounds (area.removeFromTop (18));
+    area.removeFromTop (6);
+
+    // Loudness table.
+    tableArea = area;
+    const auto rowHeight = area.getHeight() / (numLoudnessRows + 1);
+    const auto nameWidth = juce::jmax (100, area.getWidth() / 4);
     const auto valueWidth = (area.getWidth() - nameWidth) / 3;
 
-    auto headerRow = area.removeFromTop (24);
+    auto headerRow = area.removeFromTop (rowHeight);
     headerRow.removeFromLeft (nameWidth);
     mixHeader.setBounds (headerRow.removeFromLeft (valueWidth));
     refHeader.setBounds (headerRow.removeFromLeft (valueWidth));
@@ -81,7 +133,7 @@ void ParityAudioProcessorEditor::resized()
 
     for (int row = 0; row < numLoudnessRows; ++row)
     {
-        auto rowArea = area.removeFromTop (24);
+        auto rowArea = area.removeFromTop (rowHeight);
         rowLabels[(size_t) row].setBounds (rowArea.removeFromLeft (nameWidth));
         mixValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (valueWidth));
         refValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (valueWidth));
@@ -91,6 +143,8 @@ void ParityAudioProcessorEditor::resized()
 
 void ParityAudioProcessorEditor::timerCallback()
 {
+    abSwitch.setEnabledForReference (processorRef.getReferencePlayer().hasFileLoaded());
+    abSwitch.setReferenceActive (processorRef.isReferenceActive(), juce::dontSendNotification);
     updateLoudnessLabels();
 }
 
@@ -102,14 +156,6 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
             return "-";
 
         return juce::String (value, 1) + " " + suffix;
-    };
-
-    auto formatDelta = [] (float mix, float ref) -> juce::String
-    {
-        if (mix <= LoudnessAnalyzer::silenceLufs + 1.0f || ref <= LoudnessAnalyzer::silenceLufs + 1.0f)
-            return "-";
-
-        return juce::String (mix - ref, 1) + " LU";
     };
 
     const auto& mix = processorRef.getMixLoudness();
@@ -129,7 +175,21 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
     {
         mixValueLabels[(size_t) row].setText (format (mixValues[row], suffixes[row]), juce::dontSendNotification);
         refValueLabels[(size_t) row].setText (format (refValues[row], suffixes[row]), juce::dontSendNotification);
-        deltaLabels[(size_t) row].setText (formatDelta (mixValues[row], refValues[row]), juce::dontSendNotification);
+
+        auto& delta = deltaLabels[(size_t) row];
+
+        if (mixValues[row] <= LoudnessAnalyzer::silenceLufs + 1.0f
+         || refValues[row] <= LoudnessAnalyzer::silenceLufs + 1.0f)
+        {
+            delta.setText ("-", juce::dontSendNotification);
+            delta.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
+        }
+        else
+        {
+            const auto deltaValue = mixValues[row] - refValues[row];
+            delta.setText (juce::String (deltaValue, 1) + " LU", juce::dontSendNotification);
+            delta.setColour (juce::Label::textColourId, ParityLookAndFeel::colourForDelta (deltaValue));
+        }
     }
 }
 
@@ -156,6 +216,7 @@ void ParityAudioProcessorEditor::loadButtonClicked()
         }
 
         updateFileLabel();
+        abSwitch.setEnabledForReference (processorRef.getReferencePlayer().hasFileLoaded());
     });
 }
 

@@ -28,6 +28,8 @@ target_sources(Parity PRIVATE
     source/PluginEditor.cpp
     source/Audio/LoudnessAnalyzer.cpp
     source/Audio/ReferencePlayer.cpp
+    source/UI/ABSwitch.cpp
+    source/UI/ParityLookAndFeel.cpp
 )
 
 target_include_directories(Parity PUBLIC source)
