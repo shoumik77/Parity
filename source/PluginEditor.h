@@ -22,6 +22,7 @@ private:
     void loadButtonClicked();
     void updateFileLabel();
     void updateLoudnessLabels();
+    void updateStereoLabels();
 
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
@@ -36,8 +37,9 @@ private:
 
     juce::Label spectrumSectionLabel;
     SpectrumView spectrumView;
+    juce::Label viewModeLabel, meterModeLabel;
     juce::TextButton overlayButton { "OVERLAY" }, differenceButton { "DIFF" };
-    juce::TextButton realtimeButton { "RT" }, averageButton { "AVG" };
+    juce::TextButton realtimeButton { "LIVE" }, averageButton { "AVG" };
 
     juce::Label loudnessSectionLabel;
 
@@ -46,7 +48,16 @@ private:
     std::array<juce::Label, numLoudnessRows> mixValueLabels, refValueLabels, deltaLabels;
     juce::Label mixHeader, refHeader, deltaHeader;
 
-    juce::Rectangle<int> tableArea; // for painting row rules
+    juce::Label stereoSectionLabel;
+    static constexpr int numStereoRows = 2; // correlation, width
+    std::array<juce::Label, numStereoRows> stereoRowLabels;
+    std::array<juce::Label, numStereoRows> stereoMixLabels, stereoRefLabels, stereoDeltaLabels;
+    juce::Label stereoMixHeader, stereoRefHeader, stereoDeltaHeader;
+
+    juce::TooltipWindow tooltipWindow { this };
+
+    juce::Rectangle<int> tableArea;       // for painting row rules
+    juce::Rectangle<int> stereoTableArea; // for painting row rules
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

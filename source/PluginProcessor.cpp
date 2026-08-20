@@ -95,6 +95,8 @@ void ParityAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     referenceLoudness.prepare (sampleRate, samplesPerBlock);
     mixSpectrum.prepare (sampleRate);
     referenceSpectrum.prepare (sampleRate);
+    mixStereo.prepare (sampleRate);
+    referenceStereo.prepare (sampleRate);
 }
 
 void ParityAudioProcessor::releaseResources()
@@ -165,6 +167,7 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     {
         mixLoudness.process (buffer);
         mixSpectrum.process (buffer);
+        mixStereo.process (buffer);
     }
 
     // Render the reference whenever a file is loaded so its meters stay live
@@ -177,6 +180,7 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         referencePlayer.process (referenceBuffer, playheadSeconds, hostSampleRate, true);
         referenceLoudness.process (referenceBuffer);
         referenceSpectrum.process (referenceBuffer);
+        referenceStereo.process (referenceBuffer);
     }
 
     referenceGain.setTargetValue (referenceActive.load() && referencePlayer.hasFileLoaded() ? 1.0f : 0.0f);

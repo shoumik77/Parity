@@ -10,7 +10,8 @@
     (ink for MIX, signal orange for REF); the inactive segment stays
     cream with ink text.
 */
-class ABSwitch final : public juce::Component
+class ABSwitch final : public juce::Component,
+                       public juce::SettableTooltipClient
 {
 public:
     ABSwitch();

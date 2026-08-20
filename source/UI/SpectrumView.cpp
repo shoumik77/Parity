@@ -85,6 +85,15 @@ juce::Path SpectrumView::buildCurve (const std::array<float, SpectrumAnalyzer::n
 }
 
 //==============================================================================
+bool SpectrumView::hasData (const std::array<float, SpectrumAnalyzer::numBins>& magnitudesDb) noexcept
+{
+    for (auto db : magnitudesDb)
+        if (db > SpectrumAnalyzer::floorDb + 6.0f)
+            return true;
+
+    return false;
+}
+
 void SpectrumView::paint (juce::Graphics& g)
 {
     g.fillAll (ParityLookAndFeel::cream);
@@ -98,8 +107,67 @@ void SpectrumView::paint (juce::Graphics& g)
     else
         paintDifference (g, plotArea);
 
+    paintLegend (g, plotArea);
+    paintHint (g, plotArea);
+
     g.setColour (ParityLookAndFeel::ink);
     g.drawRect (getLocalBounds(), 1);
+}
+
+void SpectrumView::paintLegend (juce::Graphics& g, juce::Rectangle<float> plotArea)
+{
+    const auto font = ParityLookAndFeel::getLabelFont (11.0f);
+    g.setFont (font);
+
+    auto legendArea = plotArea.reduced (8.0f).removeFromTop (14.0f);
+
+    if (display == Display::overlay)
+    {
+        // "— MIX   — REF" top-right, colored to match the curves.
+        auto right = legendArea.getRight();
+
+        auto drawEntry = [&] (const juce::String& text, juce::Colour colour)
+        {
+            const auto textWidth = (float) juce::GlyphArrangement::getStringWidthInt (font, text);
+            const auto entry = juce::Rectangle<float> (right - textWidth, legendArea.getY(),
+                                                       textWidth, legendArea.getHeight());
+
+            g.setColour (colour);
+            g.drawText (text, entry, juce::Justification::centredRight);
+
+            const auto lineY = entry.getCentreY();
+            g.drawLine (entry.getX() - 18.0f, lineY, entry.getX() - 6.0f, lineY, 2.0f);
+
+            right = entry.getX() - 32.0f;
+        };
+
+        drawEntry ("REF", ParityLookAndFeel::accent);
+        drawEntry ("MIX", ParityLookAndFeel::ink);
+    }
+    else
+    {
+        g.setColour (ParityLookAndFeel::inkFaint);
+        g.drawText ("MIX - REF (dB)", legendArea, juce::Justification::centredRight);
+    }
+}
+
+void SpectrumView::paintHint (juce::Graphics& g, juce::Rectangle<float> plotArea)
+{
+    const auto mixHasData = hasData (mix.getMagnitudesDb());
+    const auto refHasData = hasData (reference.getMagnitudesDb());
+
+    juce::String hint;
+
+    if (! mixHasData && ! refHasData)
+        hint = "PRESS PLAY IN YOUR DAW";
+    else if (! refHasData)
+        hint = "LOAD A REFERENCE TO COMPARE";
+    else
+        return;
+
+    g.setColour (ParityLookAndFeel::inkFaint);
+    g.setFont (ParityLookAndFeel::getLabelFont (13.0f));
+    g.drawText (hint, plotArea, juce::Justification::centred);
 }
 
 void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea)

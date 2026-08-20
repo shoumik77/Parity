@@ -29,6 +29,7 @@ target_sources(Parity PRIVATE
     source/Audio/LoudnessAnalyzer.cpp
     source/Audio/ReferencePlayer.cpp
     source/Audio/SpectrumAnalyzer.cpp
+    source/Audio/StereoAnalyzer.cpp
     source/UI/ABSwitch.cpp
     source/UI/ParityLookAndFeel.cpp
     source/UI/SpectrumView.cpp
