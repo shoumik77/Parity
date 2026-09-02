@@ -60,6 +60,7 @@ private:
     juce::Rectangle<int> stereoTableArea; // for painting row rules
 
     std::unique_ptr<juce::FileChooser> fileChooser;
+    ParityAudioProcessor::ReferenceLoadStatus lastLoadStatus = ParityAudioProcessor::ReferenceLoadStatus::idle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ParityAudioProcessorEditor)
 };

@@ -81,12 +81,12 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     loudnessSectionLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
     addAndMakeVisible (loudnessSectionLabel);
 
-    const char* rowNames[numLoudnessRows] = { "Momentary", "Short-term", "Integrated", "Peak" };
+    const char* rowNames[numLoudnessRows] = { "Momentary", "Short-term", "Integrated", "True peak" };
     const char* rowTooltips[numLoudnessRows] = {
         "Loudness over the last 400 ms",
         "Loudness over the last 3 seconds",
         "Gated loudness of the whole program (EBU R128). Reference shows the full file",
-        "Highest sample level"
+        "Inter-sample peak (4x oversampled, BS.1770). Can exceed sample peak - keep below -1 dBTP for streaming"
     };
 
     for (int row = 0; row < numLoudnessRows; ++row)
@@ -292,6 +292,23 @@ void ParityAudioProcessorEditor::resized()
 
 void ParityAudioProcessorEditor::timerCallback()
 {
+    const auto status = processorRef.getReferenceLoadStatus();
+
+    if (status != lastLoadStatus)
+    {
+        lastLoadStatus = status;
+        loadButton.setEnabled (status != ParityAudioProcessor::ReferenceLoadStatus::loading);
+        updateFileLabel();
+
+        if (status == ParityAudioProcessor::ReferenceLoadStatus::failed)
+        {
+            processorRef.clearReferenceLoadFailure();
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
+                                                    "Parity",
+                                                    "Couldn't load the selected file.");
+        }
+    }
+
     abSwitch.setEnabledForReference (processorRef.getReferencePlayer().hasFileLoaded());
     abSwitch.setReferenceActive (processorRef.isReferenceActive(), juce::dontSendNotification);
     updateLoudnessLabels();
@@ -364,13 +381,14 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
     const auto fileStats = processorRef.getReferenceFileStats();
 
     const float mixValues[numLoudnessRows] = { mix.getMomentaryLufs(), mix.getShortTermLufs(),
-                                               mix.getIntegratedLufs(), mix.getPeakDb() };
+                                               mix.getIntegratedLufs(), mix.getTruePeakDb() };
 
-    // Integrated for the reference uses the offline full-file value.
+    // Integrated and true peak for the reference use the offline full-file values.
     const float refValues[numLoudnessRows] = { ref.getMomentaryLufs(), ref.getShortTermLufs(),
-                                               fileStats.integratedLufs, ref.getPeakDb() };
+                                               fileStats.integratedLufs, fileStats.truePeakDb };
 
-    const char* suffixes[numLoudnessRows] = { "LUFS", "LUFS", "LUFS", "dB" };
+    const char* suffixes[numLoudnessRows] = { "LUFS", "LUFS", "LUFS", "dBTP" };
+    const char* deltaSuffixes[numLoudnessRows] = { "LU", "LU", "LU", "dB" };
 
     for (int row = 0; row < numLoudnessRows; ++row)
     {
@@ -388,7 +406,7 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
         else
         {
             const auto deltaValue = mixValues[row] - refValues[row];
-            delta.setText (juce::String (deltaValue, 1) + " LU", juce::dontSendNotification);
+            delta.setText (juce::String (deltaValue, 1) + " " + deltaSuffixes[row], juce::dontSendNotification);
             delta.setColour (juce::Label::textColourId, ParityLookAndFeel::colourForDelta (deltaValue));
         }
     }
@@ -409,20 +427,18 @@ void ParityAudioProcessorEditor::loadButtonClicked()
         const auto file = chooser.getResult();
 
         if (file.existsAsFile())
-        {
-            if (! processorRef.loadReferenceFile (file))
-                juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon,
-                                                        "Parity",
-                                                        "Couldn't load the selected file.");
-        }
-
-        updateFileLabel();
-        abSwitch.setEnabledForReference (processorRef.getReferencePlayer().hasFileLoaded());
+            processorRef.loadReferenceFileAsync (file); // timerCallback tracks progress
     });
 }
 
 void ParityAudioProcessorEditor::updateFileLabel()
 {
+    if (processorRef.getReferenceLoadStatus() == ParityAudioProcessor::ReferenceLoadStatus::loading)
+    {
+        fileLabel.setText ("Loading reference...", juce::dontSendNotification);
+        return;
+    }
+
     const auto file = processorRef.getReferencePlayer().getFile();
     fileLabel.setText (file != juce::File() ? file.getFileName()
                                             : "No reference loaded - click LOAD REFERENCE",

@@ -10,9 +10,10 @@
     EBU R128 / ITU-R BS.1770-4 loudness analyzer.
 
     Measures K-weighted momentary (400 ms), short-term (3 s), and gated
-    integrated loudness in LUFS, plus sample peak in dBFS. process() is
-    lock-free and allocation-free, safe for the audio thread; results are
-    published through atomics for the UI thread.
+    integrated loudness in LUFS, plus true peak in dBTP (4x-oversampled
+    inter-sample peak per BS.1770-4 Annex 2). process() is lock-free and
+    allocation-free, safe for the audio thread; results are published
+    through atomics for the UI thread.
 */
 class LoudnessAnalyzer
 {
@@ -22,7 +23,7 @@ public:
     struct Stats
     {
         float integratedLufs = silenceLufs;
-        float peakDb = silenceLufs;
+        float truePeakDb = silenceLufs;
     };
 
     LoudnessAnalyzer() = default;
@@ -36,7 +37,7 @@ public:
     float getMomentaryLufs() const noexcept   { return momentaryLufs.load(); }
     float getShortTermLufs() const noexcept   { return shortTermLufs.load(); }
     float getIntegratedLufs() const noexcept  { return integratedLufs.load(); }
-    float getPeakDb() const noexcept          { return peakDb.load(); }
+    float getTruePeakDb() const noexcept      { return truePeakDb.load(); }
 
     /** Analyzes an entire buffer offline (message/background thread). */
     static Stats analyzeBuffer (const juce::AudioBuffer<float>& buffer, double sampleRate);
@@ -63,6 +64,31 @@ private:
     static Biquad makeHighPass (double sampleRate);
 
     static constexpr int maxChannels = 2;
+
+    //==============================================================================
+    /** BS.1770-4 Annex 2 true-peak meter: 4x oversampling via a 4-phase,
+        12-taps-per-phase polyphase FIR interpolator. */
+    struct TruePeakDetector
+    {
+        static constexpr int numPhases = 4;
+        static constexpr int numTaps = 12;
+        static const float coefficients[numPhases][numTaps];
+
+        void reset() noexcept
+        {
+            for (auto& h : history)
+                h.fill (0.0f);
+
+            currentMax = 0.0f;
+        }
+
+        /** Feeds a block and returns the running maximum oversampled magnitude. */
+        float processBlock (const float* const* channels, int numChannels, int numSamples) noexcept;
+
+        std::array<std::array<float, numTaps>, maxChannels> history {};
+        float currentMax = 0.0f;
+    };
+
     static constexpr int stepsPerMomentaryWindow = 4;   // 400 ms window / 100 ms step
     static constexpr int stepsPerShortTermWindow = 30;  // 3 s window / 100 ms step
 
@@ -101,13 +127,12 @@ private:
     };
 
     Engine engine;
+    TruePeakDetector truePeak;
 
     std::atomic<float> momentaryLufs { silenceLufs };
     std::atomic<float> shortTermLufs { silenceLufs };
     std::atomic<float> integratedLufs { silenceLufs };
-    std::atomic<float> peakDb { silenceLufs };
-
-    float currentPeak = 0.0f;
+    std::atomic<float> truePeakDb { silenceLufs };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LoudnessAnalyzer)
 };

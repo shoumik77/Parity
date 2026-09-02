@@ -59,6 +59,54 @@ LoudnessAnalyzer::Biquad LoudnessAnalyzer::makeHighPass (double sampleRate)
 }
 
 //==============================================================================
+// ITU-R BS.1770-4 Annex 2 interpolator coefficients (4x oversampling,
+// 48-tap FIR split into 4 phases of 12 taps).
+const float LoudnessAnalyzer::TruePeakDetector::coefficients[numPhases][numTaps] = {
+    {  0.0017089843750f,  0.0109863281250f, -0.0196533203125f,  0.0332031250000f,
+      -0.0594482421875f,  0.1373291015625f,  0.9721679687500f, -0.1022949218750f,
+       0.0476074218750f, -0.0266113281250f,  0.0148925781250f, -0.0083007812500f },
+    { -0.0291748046875f,  0.0292968750000f, -0.0517578125000f,  0.0891113281250f,
+      -0.1665039062500f,  0.4650878906250f,  0.7797851562500f, -0.2003173828125f,
+       0.1015625000000f, -0.0582275390625f,  0.0330810546875f, -0.0189208984375f },
+    { -0.0189208984375f,  0.0330810546875f, -0.0582275390625f,  0.1015625000000f,
+      -0.2003173828125f,  0.7797851562500f,  0.4650878906250f, -0.1665039062500f,
+       0.0891113281250f, -0.0517578125000f,  0.0292968750000f, -0.0291748046875f },
+    { -0.0083007812500f,  0.0148925781250f, -0.0266113281250f,  0.0476074218750f,
+      -0.1022949218750f,  0.9721679687500f,  0.1373291015625f, -0.0594482421875f,
+       0.0332031250000f, -0.0196533203125f,  0.0109863281250f,  0.0017089843750f }
+};
+
+float LoudnessAnalyzer::TruePeakDetector::processBlock (const float* const* channels,
+                                                        int numChannels, int numSamples) noexcept
+{
+    for (int ch = 0; ch < juce::jmin (numChannels, maxChannels); ++ch)
+    {
+        auto& h = history[(size_t) ch];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Shift the delay line so h[0] is the newest sample, h[k] = x[n-k].
+            for (int k = numTaps - 1; k > 0; --k)
+                h[(size_t) k] = h[(size_t) (k - 1)];
+
+            h[0] = channels[ch][i];
+
+            for (int phase = 0; phase < numPhases; ++phase)
+            {
+                float acc = 0.0f;
+
+                for (int k = 0; k < numTaps; ++k)
+                    acc += coefficients[phase][k] * h[(size_t) k];
+
+                currentMax = juce::jmax (currentMax, std::abs (acc));
+            }
+        }
+    }
+
+    return currentMax;
+}
+
+//==============================================================================
 void LoudnessAnalyzer::Engine::prepare (double sampleRate)
 {
     shelf = makeShelf (sampleRate);
@@ -162,11 +210,11 @@ void LoudnessAnalyzer::prepare (double sampleRate, int maxBlockSize)
 void LoudnessAnalyzer::reset()
 {
     engine.reset();
-    currentPeak = 0.0f;
+    truePeak.reset();
     momentaryLufs.store (silenceLufs);
     shortTermLufs.store (silenceLufs);
     integratedLufs.store (silenceLufs);
-    peakDb.store (silenceLufs);
+    truePeakDb.store (silenceLufs);
 }
 
 void LoudnessAnalyzer::process (const juce::AudioBuffer<float>& buffer) noexcept
@@ -174,11 +222,10 @@ void LoudnessAnalyzer::process (const juce::AudioBuffer<float>& buffer) noexcept
     const auto numChannels = buffer.getNumChannels();
     const auto numSamples = buffer.getNumSamples();
 
-    for (int ch = 0; ch < juce::jmin (numChannels, maxChannels); ++ch)
-        currentPeak = juce::jmax (currentPeak, buffer.getMagnitude (ch, 0, numSamples));
+    const auto peak = truePeak.processBlock (buffer.getArrayOfReadPointers(), numChannels, numSamples);
 
-    peakDb.store (currentPeak > 0.0f ? juce::Decibels::gainToDecibels (currentPeak)
-                                     : silenceLufs);
+    truePeakDb.store (peak > 0.0f ? juce::Decibels::gainToDecibels (peak)
+                                  : silenceLufs);
 
     engine.processSamples (buffer.getArrayOfReadPointers(), numChannels, numSamples, [this]
     {
@@ -231,6 +278,6 @@ LoudnessAnalyzer::Stats LoudnessAnalyzer::analyzeBuffer (const juce::AudioBuffer
 
     Stats stats;
     stats.integratedLufs = analyzer.getIntegratedLufs();
-    stats.peakDb = analyzer.getPeakDb();
+    stats.truePeakDb = analyzer.getTruePeakDb();
     return stats;
 }

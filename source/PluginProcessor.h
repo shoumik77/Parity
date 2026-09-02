@@ -48,8 +48,20 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     //==============================================================================
-    /** Loads a reference file (message thread only). Returns true on success. */
-    bool loadReferenceFile (const juce::File& file);
+    enum class ReferenceLoadStatus { idle, loading, loaded, failed };
+
+    /** Kicks off decoding and analysis of a reference file on a background
+        thread. Poll getReferenceLoadStatus() for the outcome. Message thread only. */
+    void loadReferenceFileAsync (const juce::File& file);
+
+    ReferenceLoadStatus getReferenceLoadStatus() const noexcept  { return loadStatus.load(); }
+
+    /** Acknowledges a failed load, returning the status to idle. */
+    void clearReferenceLoadFailure() noexcept
+    {
+        auto expected = ReferenceLoadStatus::failed;
+        loadStatus.compare_exchange_strong (expected, ReferenceLoadStatus::idle);
+    }
 
     ReferencePlayer& getReferencePlayer() noexcept          { return referencePlayer; }
 
@@ -81,6 +93,10 @@ private:
     StereoAnalyzer mixStereo, referenceStereo;
     std::atomic<float> referenceFileLufs { LoudnessAnalyzer::silenceLufs };
     std::atomic<float> referenceFilePeak { LoudnessAnalyzer::silenceLufs };
+
+    juce::ThreadPool loadPool { 1 };
+    std::atomic<ReferenceLoadStatus> loadStatus { ReferenceLoadStatus::idle };
+    std::atomic<int> loadGeneration { 0 };
 
     juce::AudioBuffer<float> referenceBuffer;
     juce::SmoothedValue<float> referenceGain { 0.0f };

@@ -7,9 +7,9 @@
 //==============================================================================
 /**
     Loads a reference audio file into memory and renders it synced to the
-    host playhead. File loading happens on the message thread; the loaded
-    buffer is swapped in atomically so the audio thread never sees a
-    partially-loaded file.
+    host playhead. File loading may happen on a background thread; the
+    loaded buffer is swapped in atomically so the audio thread never sees
+    a partially-loaded file.
 */
 class ReferencePlayer
 {
@@ -17,7 +17,8 @@ public:
     ReferencePlayer();
 
     /** Attempts to load the given audio file. Returns true on success.
-        Call from the message thread only. */
+        Decoding touches only local state until the final atomic swap, so
+        this may be called from a single background thread. */
     bool loadFile (const juce::File& file);
 
     /** Clears the currently loaded file. Call from the message thread only. */
@@ -30,7 +31,7 @@ public:
     juce::String getWildcardPattern() const  { return formatManager.getWildcardForAllFormats(); }
 
     /** Calls fn (audio, sampleRate) with the currently loaded audio, if any.
-        Message thread only. */
+        Not for the audio thread (may release the previous buffer). */
     void withLoadedAudio (const std::function<void (const juce::AudioBuffer<float>&, double)>& fn) const
     {
         if (auto f = std::atomic_load (&loadedFile))

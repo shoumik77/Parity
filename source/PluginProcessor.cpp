@@ -16,6 +16,7 @@ ParityAudioProcessor::ParityAudioProcessor()
 
 ParityAudioProcessor::~ParityAudioProcessor()
 {
+    loadPool.removeAllJobs (true, 5000);
 }
 
 //==============================================================================
@@ -238,26 +239,41 @@ void ParityAudioProcessor::setStateInformation (const void* data, int sizeInByte
             const juce::File file (state->getStringAttribute ("referenceFile"));
 
             if (file.existsAsFile())
-                loadReferenceFile (file);
+                loadReferenceFileAsync (file);
 
             referenceActive.store (state->getBoolAttribute ("referenceActive"));
         }
     }
 }
 
-bool ParityAudioProcessor::loadReferenceFile (const juce::File& file)
+void ParityAudioProcessor::loadReferenceFileAsync (const juce::File& file)
 {
-    if (! referencePlayer.loadFile (file))
-        return false;
+    const auto generation = loadGeneration.fetch_add (1) + 1;
+    loadStatus.store (ReferenceLoadStatus::loading);
 
-    referencePlayer.withLoadedAudio ([this] (const juce::AudioBuffer<float>& audio, double sampleRate)
+    loadPool.addJob ([this, file, generation]
     {
-        const auto stats = LoudnessAnalyzer::analyzeBuffer (audio, sampleRate);
-        referenceFileLufs.store (stats.integratedLufs);
-        referenceFilePeak.store (stats.peakDb);
-    });
+        // Decode into job-local storage; only the final atomic swap is shared.
+        const auto ok = referencePlayer.loadFile (file);
 
-    return true;
+        if (generation != loadGeneration.load())
+            return; // superseded by a newer load request
+
+        if (! ok)
+        {
+            loadStatus.store (ReferenceLoadStatus::failed);
+            return;
+        }
+
+        referencePlayer.withLoadedAudio ([this] (const juce::AudioBuffer<float>& audio, double sampleRate)
+        {
+            const auto stats = LoudnessAnalyzer::analyzeBuffer (audio, sampleRate);
+            referenceFileLufs.store (stats.integratedLufs);
+            referenceFilePeak.store (stats.truePeakDb);
+        });
+
+        loadStatus.store (ReferenceLoadStatus::loaded);
+    });
 }
 
 //==============================================================================
