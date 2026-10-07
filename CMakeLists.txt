@@ -63,3 +63,15 @@ target_link_libraries(LoudnessSanityTest PRIVATE
     juce::juce_audio_basics
     juce::juce_recommended_config_flags
 )
+
+juce_add_console_app(MasterChainTest PRODUCT_NAME "MasterChainTest")
+
+target_sources(MasterChainTest PRIVATE
+    Tests/MasterChainTest.cpp
+    source/Audio/MasterChain.cpp
+)
+
+target_link_libraries(MasterChainTest PRIVATE
+    juce::juce_audio_basics
+    juce::juce_recommended_config_flags
+)

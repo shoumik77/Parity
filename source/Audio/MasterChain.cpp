@@ -1,13 +1,18 @@
 #include "MasterChain.h"
 
+#include <cmath>
+
 void MasterChain::prepare (double sampleRate, int maxBlockSize, int numChannels)
 {
+    juce::ignoreUnused (maxBlockSize, numChannels);
+
+    currentSampleRate = sampleRate;
     gain.reset (sampleRate, 0.02);
     clipThreshold.reset (sampleRate, 0.02);
+    ceiling.reset (sampleRate, 0.02);
     gain.setCurrentAndTargetValue (1.0f);
     clipThreshold.setCurrentAndTargetValue (bypassedClipThreshold);
-
-    limiter.prepare ({ sampleRate, (juce::uint32) maxBlockSize, (juce::uint32) numChannels });
+    ceiling.setCurrentAndTargetValue (1.0f);
     reset();
 }
 
@@ -15,7 +20,8 @@ void MasterChain::reset()
 {
     gain.setCurrentAndTargetValue (gain.getTargetValue());
     clipThreshold.setCurrentAndTargetValue (clipThreshold.getTargetValue());
-    limiter.reset();
+    ceiling.setCurrentAndTargetValue (ceiling.getTargetValue());
+    envelope = 0.0f;
 }
 
 void MasterChain::setParameters (bool clipEnabled, float clipThresholdDb,
@@ -27,9 +33,9 @@ void MasterChain::setParameters (bool clipEnabled, float clipThresholdDb,
     gain.setTargetValue (juce::Decibels::decibelsToGain (limitEnabled ? gainDb : 0.0f));
     clipThreshold.setTargetValue (clipEnabled ? juce::Decibels::decibelsToGain (clipThresholdDb)
                                               : bypassedClipThreshold);
+    ceiling.setTargetValue (juce::Decibels::decibelsToGain (ceilingDb));
     limitOn = limitEnabled;
-    limiter.setThreshold (ceilingDb);
-    limiter.setRelease (releaseMs);
+    releaseCoeff = std::exp (-1.0f / (float) (juce::jmax (1.0f, releaseMs) * 0.001 * currentSampleRate));
 }
 
 void MasterChain::process (juce::AudioBuffer<float>& buffer) noexcept
@@ -41,20 +47,31 @@ void MasterChain::process (juce::AudioBuffer<float>& buffer) noexcept
     {
         const auto g = gain.getNextValue();
         const auto threshold = clipThreshold.getNextValue();
+        const auto ceilingNow = ceiling.getNextValue();
+
+        float framePeak = 0.0f;
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            const auto sample = buffer.getSample (ch, i) * g;
-            buffer.setSample (ch, i, juce::jlimit (-threshold, threshold, sample));
+            const auto sample = juce::jlimit (-threshold, threshold,
+                                              buffer.getSample (ch, i) * g);
+            buffer.setSample (ch, i, sample);
+            framePeak = juce::jmax (framePeak, std::abs (sample));
         }
-    }
 
-    // The limiter only attenuates above the ceiling, so engaging it is
-    // click-free without extra smoothing.
-    if (limitOn)
-    {
-        juce::dsp::AudioBlock<float> block (buffer);
-        juce::dsp::ProcessContextReplacing<float> context (block);
-        limiter.process (context);
+        if (! limitOn)
+            continue;
+
+        // Channel-linked brickwall: instant attack, exponential release.
+        envelope = framePeak > envelope ? framePeak
+                                        : framePeak + releaseCoeff * (envelope - framePeak);
+
+        if (envelope > ceilingNow)
+        {
+            const auto reduction = ceilingNow / envelope;
+
+            for (int ch = 0; ch < numChannels; ++ch)
+                buffer.setSample (ch, i, buffer.getSample (ch, i) * reduction);
+        }
     }
 }

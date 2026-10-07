@@ -1,12 +1,17 @@
 #pragma once
 
-#include <juce_dsp/juce_dsp.h>
+#include <juce_audio_basics/juce_audio_basics.h>
 
 //==============================================================================
 /**
     Master processing for the mix path: smoothed input gain, hard clipper,
     and a brickwall limiter (ceiling + release). Zero latency - the limiter
-    has no lookahead, so no delay compensation is needed.
+    uses an instant-attack envelope follower, no lookahead, so no delay
+    compensation is needed.
+
+    (juce::dsp::Limiter is deliberately not used: it applies makeup gain of
+    -threshold and clips at 0 dBFS, acting as a maximizer rather than
+    honouring a true output ceiling.)
 
     setParameters() may be called from the audio thread each block;
     process() is allocation-free.
@@ -32,9 +37,14 @@ private:
 
     juce::SmoothedValue<float> gain { 1.0f };
     juce::SmoothedValue<float> clipThreshold { bypassedClipThreshold };
+    juce::SmoothedValue<float> ceiling { 1.0f };
     bool limitOn = false;
 
-    juce::dsp::Limiter<float> limiter;
+    // Brickwall limiter state: channel-linked envelope follower,
+    // instant attack, exponential release.
+    double currentSampleRate = 44100.0;
+    float releaseCoeff = 0.0f;
+    float envelope = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterChain)
 };
