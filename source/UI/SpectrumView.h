@@ -39,7 +39,6 @@ private:
     void paintOverlay (juce::Graphics&, juce::Rectangle<float> plotArea);
     void paintDifference (juce::Graphics&, juce::Rectangle<float> plotArea);
     void paintGrid (juce::Graphics&, juce::Rectangle<float> plotArea);
-    void paintLegend (juce::Graphics&, juce::Rectangle<float> plotArea);
     void paintHint (juce::Graphics&, juce::Rectangle<float> plotArea);
 
     static bool hasData (const std::array<float, SpectrumAnalyzer::numBins>& magnitudesDb) noexcept;

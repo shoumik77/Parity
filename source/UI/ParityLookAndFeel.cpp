@@ -1,54 +1,60 @@
 #include "ParityLookAndFeel.h"
 
-const juce::Colour ParityLookAndFeel::cream     { 0xffefeae0 };
-const juce::Colour ParityLookAndFeel::ink       { 0xff26221c };
-const juce::Colour ParityLookAndFeel::inkFaint  { 0xff77705f };
-const juce::Colour ParityLookAndFeel::panelLine { 0xffc8c0b0 };
-const juce::Colour ParityLookAndFeel::accent    { 0xffd96c2c };
-const juce::Colour ParityLookAndFeel::deltaGood { 0xff557c4f };
-const juce::Colour ParityLookAndFeel::deltaWarn { 0xffb8860b };
-const juce::Colour ParityLookAndFeel::deltaBad  { 0xffa93f2e };
+const juce::Colour ParityLookAndFeel::background { 0xff0f0e0b };
+const juce::Colour ParityLookAndFeel::panel      { 0xff151412 };
+const juce::Colour ParityLookAndFeel::control    { 0xff1a1916 };
+const juce::Colour ParityLookAndFeel::line       { 0xff2a2824 };
+const juce::Colour ParityLookAndFeel::gridLine   { 0xff252521 };
+const juce::Colour ParityLookAndFeel::ink        { 0xfff0ede4 };
+const juce::Colour ParityLookAndFeel::inkSoft    { 0xffe9e5d9 };
+const juce::Colour ParityLookAndFeel::inkFaint   { 0xff9b998f };
+const juce::Colour ParityLookAndFeel::inkDim     { 0xff696960 };
+const juce::Colour ParityLookAndFeel::inkGhost   { 0xff7a7870 };
+const juce::Colour ParityLookAndFeel::inkMuted   { 0xff555450 };
+const juce::Colour ParityLookAndFeel::accent     { 0xffd7804f };
+const juce::Colour ParityLookAndFeel::accentDark { 0xff11110f };
+const juce::Colour ParityLookAndFeel::warn       { 0xffe8756a };
+const juce::Colour ParityLookAndFeel::meterHot   { 0xffff6b3d };
+const juce::Colour ParityLookAndFeel::meterTop   { 0xfff0c080 };
+const juce::Colour ParityLookAndFeel::meterMid   { 0xffe8a86a };
+const juce::Colour ParityLookAndFeel::handleFill { 0xff3a3a35 };
 
 ParityLookAndFeel::ParityLookAndFeel()
 {
-    setColour (juce::ResizableWindow::backgroundColourId, cream);
-    setColour (juce::Label::textColourId, ink);
-    setColour (juce::TextButton::buttonColourId, cream);
-    setColour (juce::TextButton::buttonOnColourId, ink);
-    setColour (juce::TextButton::textColourOffId, ink);
-    setColour (juce::TextButton::textColourOnId, cream);
-    setColour (juce::ComboBox::outlineColourId, ink);
-    setColour (juce::AlertWindow::backgroundColourId, cream);
+    setColour (juce::ResizableWindow::backgroundColourId, background);
+    setColour (juce::Label::textColourId, inkSoft);
+    setColour (juce::TextButton::buttonColourId, control);
+    setColour (juce::TextButton::buttonOnColourId, control);
+    setColour (juce::TextButton::textColourOffId, inkSoft);
+    setColour (juce::TextButton::textColourOnId, ink);
+    setColour (juce::ComboBox::outlineColourId, line);
+    setColour (juce::AlertWindow::backgroundColourId, panel);
     setColour (juce::AlertWindow::textColourId, ink);
-    setColour (juce::Slider::textBoxTextColourId, ink);
-    setColour (juce::Slider::textBoxOutlineColourId, panelLine);
-    setColour (juce::Slider::textBoxBackgroundColourId, cream);
-    setColour (juce::TextEditor::focusedOutlineColourId, accent);
-    setColour (juce::TextEditor::highlightColourId, accent.withAlpha (0.3f));
+    setColour (juce::TooltipWindow::backgroundColourId, control);
+    setColour (juce::TooltipWindow::textColourId, inkSoft);
+    setColour (juce::TooltipWindow::outlineColourId, line);
 }
 
 //==============================================================================
+juce::Font ParityLookAndFeel::getFont (float height, juce::Font::FontStyleFlags style)
+{
+    // The design uses Inter; fall back to the system sans when unavailable.
+    return { juce::FontOptions { "Inter", height, style } };
+}
+
 juce::Font ParityLookAndFeel::getMonoFont (float height)
 {
     return { juce::FontOptions { juce::Font::getDefaultMonospacedFontName(), height, juce::Font::plain } };
 }
 
-juce::Font ParityLookAndFeel::getLabelFont (float height)
-{
-    return juce::Font (juce::FontOptions { height, juce::Font::plain }).withExtraKerningFactor (0.08f);
-}
-
 juce::Colour ParityLookAndFeel::colourForDelta (float deltaLu)
 {
-    const auto magnitude = std::abs (deltaLu);
+    return std::abs (deltaLu) > 3.0f ? accent : inkFaint;
+}
 
-    if (magnitude <= 1.0f)
-        return deltaGood;
-
-    if (magnitude <= 3.0f)
-        return deltaWarn;
-
-    return deltaBad;
+std::unique_ptr<juce::Drawable> ParityLookAndFeel::loadIcon (const char* data, int size)
+{
+    return juce::Drawable::createFromImageData (data, (size_t) size);
 }
 
 //==============================================================================
@@ -60,55 +66,23 @@ void ParityLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
     juce::ignoreUnused (backgroundColour);
 
     auto bounds = button.getLocalBounds().toFloat().reduced (0.5f);
-    constexpr float cornerRadius = 2.0f;
+    constexpr float cornerRadius = 6.0f;
 
-    auto fill = button.getToggleState() || shouldDrawButtonAsDown ? ink : cream;
+    auto fill = control;
 
-    if (shouldDrawButtonAsHighlighted && ! shouldDrawButtonAsDown && ! button.getToggleState())
-        fill = cream.darker (0.05f);
+    if (shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown)
+        fill = fill.brighter (0.06f);
 
     g.setColour (fill);
     g.fillRoundedRectangle (bounds, cornerRadius);
 
-    g.setColour (ink);
+    // Toggled controls get the pale active border from the design.
+    g.setColour (button.getToggleState() ? inkFaint : line);
     g.drawRoundedRectangle (bounds, cornerRadius, 1.0f);
 }
 
-juce::Font ParityLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
+juce::Font ParityLookAndFeel::getTextButtonFont (juce::TextButton& button, int buttonHeight)
 {
-    return getLabelFont (juce::jmin (15.0f, (float) buttonHeight * 0.55f));
-}
-
-//==============================================================================
-void ParityLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
-                                          float sliderPos, float minSliderPos, float maxSliderPos,
-                                          juce::Slider::SliderStyle style, juce::Slider& slider)
-{
-    if (style != juce::Slider::LinearHorizontal)
-    {
-        LookAndFeel_V4::drawLinearSlider (g, x, y, width, height, sliderPos,
-                                          minSliderPos, maxSliderPos, style, slider);
-        return;
-    }
-
-    const auto centreY = (float) y + (float) height * 0.5f;
-
-    // 1 px track with an accent fill up to the thumb.
-    g.setColour (panelLine);
-    g.fillRect ((float) x, centreY - 0.5f, (float) width, 1.0f);
-
-    g.setColour (slider.isEnabled() ? accent : inkFaint);
-    g.fillRect ((float) x, centreY - 0.5f, sliderPos - (float) x, 1.0f);
-
-    // Thumb: a slim vertical ink bar, test-instrument style.
-    constexpr float thumbWidth = 3.0f, thumbHeight = 14.0f;
-    g.setColour (slider.isEnabled() ? ink : inkFaint);
-    g.fillRect (sliderPos - thumbWidth * 0.5f, centreY - thumbHeight * 0.5f, thumbWidth, thumbHeight);
-}
-
-juce::Label* ParityLookAndFeel::createSliderTextBox (juce::Slider& slider)
-{
-    auto* label = LookAndFeel_V4::createSliderTextBox (slider);
-    label->setFont (getMonoFont (12.0f));
-    return label;
+    juce::ignoreUnused (buttonHeight);
+    return getFont (11.0f, button.getToggleState() ? juce::Font::bold : juce::Font::plain);
 }

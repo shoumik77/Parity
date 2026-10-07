@@ -19,6 +19,7 @@ ParityAudioProcessor::ParityAudioProcessor()
     limitGainParam     = apvts.getRawParameterValue ("limitGain");
     limitCeilingParam  = apvts.getRawParameterValue ("limitCeiling");
     limitReleaseParam  = apvts.getRawParameterValue ("limitRelease");
+    matchOnParam       = apvts.getRawParameterValue ("matchOn");
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout ParityAudioProcessor::createParameterLayout()
@@ -39,6 +40,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout ParityAudioProcessor::create
                                               juce::NormalisableRange<float> (-12.0f, 0.0f, 0.1f), -1.0f));
     layout.add (std::make_unique<FloatParam> ("limitRelease", "Limit Release",
                                               juce::NormalisableRange<float> (1.0f, 1000.0f, 1.0f, 0.3f), 100.0f));
+
+    layout.add (std::make_unique<BoolParam> ("matchOn", "Loudness Match", false));
 
     return layout;
 }
@@ -120,6 +123,8 @@ void ParityAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     referenceBuffer.setSize (2, samplesPerBlock);
     referenceGain.reset (sampleRate, 0.02); // 20 ms ramp to avoid clicks on toggle
     referenceGain.setCurrentAndTargetValue (referenceActive.load() ? 1.0f : 0.0f);
+    matchGain.reset (sampleRate, 0.05);
+    matchGain.setCurrentAndTargetValue (1.0f);
 
     mixLoudness.prepare (sampleRate, samplesPerBlock);
     referenceLoudness.prepare (sampleRate, samplesPerBlock);
@@ -192,6 +197,9 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         }
     }
 
+    lastPlayheadSeconds.store (playheadSeconds);
+    hostPlaying.store (hostIsPlaying);
+
     // Master processing applies to the mix only, ahead of the analyzer taps,
     // so the meters read what would actually be rendered.
     masterChain.setParameters (clipOnParam->load() > 0.5f, clipThresholdParam->load(),
@@ -223,6 +231,19 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
 
     referenceGain.setTargetValue (referenceActive.load() && referencePlayer.hasFileLoaded() ? 1.0f : 0.0f);
 
+    // Loudness match: play the reference at the mix's integrated loudness so
+    // A/B comparisons aren't biased by level. Applied to monitoring only -
+    // the reference meters still show the file's true levels.
+    const auto mixLufs = mixLoudness.getIntegratedLufs();
+    const auto refLufs = referenceFileLufs.load();
+    const auto matchActive = matchOnParam->load() > 0.5f
+                          && mixLufs > LoudnessAnalyzer::silenceLufs + 1.0f
+                          && refLufs > LoudnessAnalyzer::silenceLufs + 1.0f;
+
+    const auto matchDb = matchActive ? juce::jlimit (-24.0f, 24.0f, mixLufs - refLufs) : 0.0f;
+    matchGainDb.store (matchDb);
+    matchGain.setTargetValue (juce::Decibels::decibelsToGain (matchDb));
+
     // Skip the crossfade entirely while fully faded out.
     if (referenceGain.getCurrentValue() <= 0.0f && ! referenceGain.isSmoothing())
         return;
@@ -237,11 +258,12 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     for (int i = 0; i < numSamples; ++i)
     {
         const auto gain = referenceGain.getNextValue();
+        const auto match = matchGain.getNextValue();
 
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         {
             const auto mix = buffer.getSample (ch, i);
-            const auto ref = referenceBuffer.getSample (ch, i);
+            const auto ref = referenceBuffer.getSample (ch, i) * match;
             buffer.setSample (ch, i, mix * (1.0f - gain) + ref * gain);
         }
     }

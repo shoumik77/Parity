@@ -76,6 +76,7 @@ public:
     SpectrumAnalyzer& getReferenceSpectrum() noexcept              { return referenceSpectrum; }
 
     const StereoAnalyzer& getMixStereo() const noexcept            { return mixStereo; }
+    const MasterChain& getMasterChain() const noexcept             { return masterChain; }
     const StereoAnalyzer& getReferenceStereo() const noexcept      { return referenceStereo; }
 
     /** Full-file stats computed offline when the reference was loaded. */
@@ -85,6 +86,14 @@ public:
     }
 
     juce::AudioProcessorValueTreeState& getParameters() noexcept  { return apvts; }
+
+    //==============================================================================
+    /** Transport info for the reference progress display (UI thread). */
+    double getPlayheadSeconds() const noexcept     { return lastPlayheadSeconds.load(); }
+    bool isHostPlaying() const noexcept            { return hostPlaying.load(); }
+
+    /** Gain in dB currently applied to the reference when loudness match is on. */
+    float getMatchGainDb() const noexcept          { return matchGainDb.load(); }
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -105,7 +114,12 @@ private:
 
     juce::AudioBuffer<float> referenceBuffer;
     juce::SmoothedValue<float> referenceGain { 0.0f };
+    juce::SmoothedValue<float> matchGain { 1.0f };
     double hostSampleRate = 44100.0;
+
+    std::atomic<double> lastPlayheadSeconds { -1.0 };
+    std::atomic<bool> hostPlaying { false };
+    std::atomic<float> matchGainDb { 0.0f };
 
     juce::AudioProcessorValueTreeState apvts;
     MasterChain masterChain;
@@ -115,6 +129,7 @@ private:
     std::atomic<float>* limitGainParam = nullptr;
     std::atomic<float>* limitCeilingParam = nullptr;
     std::atomic<float>* limitReleaseParam = nullptr;
+    std::atomic<float>* matchOnParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ParityAudioProcessor)
 };

@@ -25,6 +25,13 @@ public:
     void clear();
 
     bool hasFileLoaded() const noexcept   { return std::atomic_load (&loadedFile) != nullptr; }
+
+    double getDurationSeconds() const noexcept
+    {
+        auto f = std::atomic_load (&loadedFile);
+        return f != nullptr && f->sampleRate > 0.0 ? f->audio.getNumSamples() / f->sampleRate : 0.0;
+    }
+
     juce::File getFile() const            { auto f = std::atomic_load (&loadedFile); return f != nullptr ? f->sourceFile : juce::File(); }
 
     /** Returns a wildcard pattern of supported formats for use with a FileChooser. */

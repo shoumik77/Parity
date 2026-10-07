@@ -13,6 +13,7 @@ void MasterChain::prepare (double sampleRate, int maxBlockSize, int numChannels)
     gain.setCurrentAndTargetValue (1.0f);
     clipThreshold.setCurrentAndTargetValue (bypassedClipThreshold);
     ceiling.setCurrentAndTargetValue (1.0f);
+    meterDecayCoeff = std::exp (-1.0f / (float) (0.3 * sampleRate));
     reset();
 }
 
@@ -22,6 +23,8 @@ void MasterChain::reset()
     clipThreshold.setCurrentAndTargetValue (clipThreshold.getTargetValue());
     ceiling.setCurrentAndTargetValue (ceiling.getTargetValue());
     envelope = 0.0f;
+    postClipLevel.store (0.0f);
+    postLimitLevel.store (0.0f);
 }
 
 void MasterChain::setParameters (bool clipEnabled, float clipThresholdDb,
@@ -43,6 +46,9 @@ void MasterChain::process (juce::AudioBuffer<float>& buffer) noexcept
     const auto numSamples = buffer.getNumSamples();
     const auto numChannels = buffer.getNumChannels();
 
+    auto clipMeter = postClipLevel.load();
+    auto limitMeter = postLimitLevel.load();
+
     for (int i = 0; i < numSamples; ++i)
     {
         const auto g = gain.getNextValue();
@@ -59,19 +65,32 @@ void MasterChain::process (juce::AudioBuffer<float>& buffer) noexcept
             framePeak = juce::jmax (framePeak, std::abs (sample));
         }
 
+        clipMeter = juce::jmax (framePeak, clipMeter * meterDecayCoeff);
+
         if (! limitOn)
+        {
+            limitMeter = juce::jmax (framePeak, limitMeter * meterDecayCoeff);
             continue;
+        }
 
         // Channel-linked brickwall: instant attack, exponential release.
         envelope = framePeak > envelope ? framePeak
                                         : framePeak + releaseCoeff * (envelope - framePeak);
 
+        auto limitedPeak = framePeak;
+
         if (envelope > ceilingNow)
         {
             const auto reduction = ceilingNow / envelope;
+            limitedPeak = framePeak * reduction;
 
             for (int ch = 0; ch < numChannels; ++ch)
                 buffer.setSample (ch, i, buffer.getSample (ch, i) * reduction);
         }
+
+        limitMeter = juce::jmax (limitedPeak, limitMeter * meterDecayCoeff);
     }
+
+    postClipLevel.store (clipMeter);
+    postLimitLevel.store (limitMeter);
 }

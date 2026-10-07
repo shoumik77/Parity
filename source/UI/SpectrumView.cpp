@@ -96,9 +96,12 @@ bool SpectrumView::hasData (const std::array<float, SpectrumAnalyzer::numBins>& 
 
 void SpectrumView::paint (juce::Graphics& g)
 {
-    g.fillAll (ParityLookAndFeel::cream);
+    g.fillAll (ParityLookAndFeel::background);
 
-    auto plotArea = getLocalBounds().toFloat().reduced (1.0f);
+    // Reserve a right gutter for dBFS labels and a bottom row for frequencies.
+    auto bounds = getLocalBounds().toFloat();
+    bounds.removeFromRight (40.0f);
+    auto plotArea = bounds.withTrimmedBottom (20.0f);
 
     paintGrid (g, plotArea);
 
@@ -107,48 +110,7 @@ void SpectrumView::paint (juce::Graphics& g)
     else
         paintDifference (g, plotArea);
 
-    paintLegend (g, plotArea);
     paintHint (g, plotArea);
-
-    g.setColour (ParityLookAndFeel::ink);
-    g.drawRect (getLocalBounds(), 1);
-}
-
-void SpectrumView::paintLegend (juce::Graphics& g, juce::Rectangle<float> plotArea)
-{
-    const auto font = ParityLookAndFeel::getLabelFont (11.0f);
-    g.setFont (font);
-
-    auto legendArea = plotArea.reduced (8.0f).removeFromTop (14.0f);
-
-    if (display == Display::overlay)
-    {
-        // "— MIX   — REF" top-right, colored to match the curves.
-        auto right = legendArea.getRight();
-
-        auto drawEntry = [&] (const juce::String& text, juce::Colour colour)
-        {
-            const auto textWidth = (float) juce::GlyphArrangement::getStringWidthInt (font, text);
-            const auto entry = juce::Rectangle<float> (right - textWidth, legendArea.getY(),
-                                                       textWidth, legendArea.getHeight());
-
-            g.setColour (colour);
-            g.drawText (text, entry, juce::Justification::centredRight);
-
-            const auto lineY = entry.getCentreY();
-            g.drawLine (entry.getX() - 18.0f, lineY, entry.getX() - 6.0f, lineY, 2.0f);
-
-            right = entry.getX() - 32.0f;
-        };
-
-        drawEntry ("REF", ParityLookAndFeel::accent);
-        drawEntry ("MIX", ParityLookAndFeel::ink);
-    }
-    else
-    {
-        g.setColour (ParityLookAndFeel::inkFaint);
-        g.drawText ("MIX - REF (dB)", legendArea, juce::Justification::centredRight);
-    }
 }
 
 void SpectrumView::paintHint (juce::Graphics& g, juce::Rectangle<float> plotArea)
@@ -159,47 +121,57 @@ void SpectrumView::paintHint (juce::Graphics& g, juce::Rectangle<float> plotArea
     juce::String hint;
 
     if (! mixHasData && ! refHasData)
-        hint = "PRESS PLAY IN YOUR DAW";
+        hint = "Press play in your DAW";
     else if (! refHasData)
-        hint = "LOAD A REFERENCE TO COMPARE";
+        hint = "Load a reference to compare";
     else
         return;
 
-    g.setColour (ParityLookAndFeel::inkFaint);
-    g.setFont (ParityLookAndFeel::getLabelFont (13.0f));
+    g.setColour (ParityLookAndFeel::inkDim);
+    g.setFont (ParityLookAndFeel::getFont (12.0f));
     g.drawText (hint, plotArea, juce::Justification::centred);
 }
 
 void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea)
 {
-    g.setColour (ParityLookAndFeel::panelLine);
-    g.setFont (ParityLookAndFeel::getMonoFont (10.0f));
+    g.setFont (ParityLookAndFeel::getFont (10.0f));
 
-    // Octave frequency lines with labels.
-    for (auto hz : { 31.5f, 63.0f, 125.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f })
+    // Labelled octave divisions matching the design.
+    for (auto hz : { 20.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f, 20000.0f })
     {
         const auto x = frequencyToX (hz, plotArea);
 
-        g.setColour (ParityLookAndFeel::panelLine);
+        g.setColour (ParityLookAndFeel::gridLine);
         g.drawVerticalLine ((int) x, plotArea.getY(), plotArea.getBottom());
 
-        const auto label = hz >= 1000.0f ? juce::String (hz / 1000.0f, hz == 1000.0f ? 0 : 0) + "k"
+        const auto label = hz >= 1000.0f ? juce::String ((int) (hz / 1000.0f)) + "k"
                                          : juce::String ((int) hz);
 
         g.setColour (ParityLookAndFeel::inkFaint);
-        g.drawText (label, (int) x + 3, (int) plotArea.getBottom() - 14, 40, 12,
-                    juce::Justification::centredLeft);
+        g.drawText (label, juce::jlimit ((int) plotArea.getX(), (int) plotArea.getRight() - 40,
+                                         (int) x - 20),
+                    (int) plotArea.getBottom() + 4, 40, 12, juce::Justification::centred);
     }
+
+    const auto labelGutter = getLocalBounds().toFloat().withX (plotArea.getRight() + 10.0f);
 
     if (display == Display::overlay)
     {
-        // 10 dB horizontal lines.
-        for (float db = maxDb - 10.0f; db > minDb; db -= 10.0f)
+        // 12 dB horizontal lines with right-gutter labels (-12 .. -72).
+        for (float db = -12.0f; db > minDb; db -= 12.0f)
         {
             const auto y = juce::jmap (db, minDb, maxDb, plotArea.getBottom(), plotArea.getY());
-            g.setColour (ParityLookAndFeel::panelLine.withAlpha (0.6f));
+
+            g.setColour (ParityLookAndFeel::gridLine);
             g.drawHorizontalLine ((int) y, plotArea.getX(), plotArea.getRight());
+
+            g.setColour (ParityLookAndFeel::inkDim);
+            g.drawText (juce::String ((int) db), (int) labelGutter.getX(), (int) y - 6, 30, 12,
+                        juce::Justification::centredLeft);
         }
+
+        g.drawText ("dBFS", (int) labelGutter.getX(), (int) plotArea.getBottom() + 4, 30, 12,
+                    juce::Justification::centredLeft);
     }
     else
     {
@@ -208,36 +180,44 @@ void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea
         {
             const auto y = juce::jmap (db, -diffRangeDb, diffRangeDb, plotArea.getBottom(), plotArea.getY());
 
-            g.setColour (db == 0.0f ? ParityLookAndFeel::ink.withAlpha (0.5f)
-                                    : ParityLookAndFeel::panelLine.withAlpha (0.6f));
+            g.setColour (db == 0.0f ? ParityLookAndFeel::inkFaint.withAlpha (0.5f)
+                                    : ParityLookAndFeel::gridLine);
             g.drawHorizontalLine ((int) y, plotArea.getX(), plotArea.getRight());
         }
+
+        g.setColour (ParityLookAndFeel::inkDim);
+        g.drawText ("MIX - REF dB", (int) labelGutter.getX(), (int) plotArea.getY(),
+                    38, 12, juce::Justification::centredLeft);
     }
 }
 
 void SpectrumView::paintOverlay (juce::Graphics& g, juce::Rectangle<float> plotArea)
 {
-    // Reference behind, mix in front.
-    auto referencePath = buildCurve (reference.getMagnitudesDb(), plotArea, reference);
-    g.setColour (ParityLookAndFeel::accent);
-    g.strokePath (referencePath, juce::PathStrokeType (1.6f));
-
-    auto mixPath = buildCurve (mix.getMagnitudesDb(), plotArea, mix);
-
-    // Soft fill under the mix curve.
-    if (! mixPath.isEmpty())
+    auto paintCurve = [&] (const SpectrumAnalyzer& analyzer, juce::Colour colour, float fillAlpha)
     {
-        auto fillPath = mixPath;
-        fillPath.lineTo (plotArea.getRight(), plotArea.getBottom());
-        fillPath.lineTo (plotArea.getX(), plotArea.getBottom());
-        fillPath.closeSubPath();
+        auto path = buildCurve (analyzer.getMagnitudesDb(), plotArea, analyzer);
 
-        g.setColour (ParityLookAndFeel::ink.withAlpha (0.08f));
-        g.fillPath (fillPath);
-    }
+        if (path.isEmpty())
+            return;
 
-    g.setColour (ParityLookAndFeel::ink);
-    g.strokePath (mixPath, juce::PathStrokeType (1.8f));
+        if (fillAlpha > 0.0f)
+        {
+            auto fillPath = path;
+            fillPath.lineTo (plotArea.getRight(), plotArea.getBottom());
+            fillPath.lineTo (plotArea.getX(), plotArea.getBottom());
+            fillPath.closeSubPath();
+
+            g.setColour (colour.withAlpha (fillAlpha));
+            g.fillPath (fillPath);
+        }
+
+        g.setColour (colour);
+        g.strokePath (path, juce::PathStrokeType (1.6f));
+    };
+
+    // Reference behind (orange fill), mix in front (pale fill).
+    paintCurve (reference, ParityLookAndFeel::accent, 0.18f);
+    paintCurve (mix, ParityLookAndFeel::inkSoft, 0.12f);
 }
 
 void SpectrumView::paintDifference (juce::Graphics& g, juce::Rectangle<float> plotArea)
@@ -298,6 +278,6 @@ void SpectrumView::paintDifference (juce::Graphics& g, juce::Rectangle<float> pl
         g.fillPath (fillPath);
     }
 
-    g.setColour (ParityLookAndFeel::ink);
+    g.setColour (ParityLookAndFeel::inkSoft);
     g.strokePath (path, juce::PathStrokeType (1.8f));
 }

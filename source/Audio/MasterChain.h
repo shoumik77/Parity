@@ -2,6 +2,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include <atomic>
+
 //==============================================================================
 /**
     Master processing for the mix path: smoothed input gain, hard clipper,
@@ -30,6 +32,10 @@ public:
 
     void process (juce::AudioBuffer<float>& buffer) noexcept;
 
+    /** Peak linear levels (with ~300 ms decay) for the UI meters. */
+    float getPostClipLevel() const noexcept   { return postClipLevel.load(); }
+    float getPostLimitLevel() const noexcept  { return postLimitLevel.load(); }
+
 private:
     // Clip threshold ramps up here when the clipper is bypassed: high enough
     // to be transparent, low enough that the smoothing ramp stays short.
@@ -45,6 +51,9 @@ private:
     double currentSampleRate = 44100.0;
     float releaseCoeff = 0.0f;
     float envelope = 0.0f;
+
+    std::atomic<float> postClipLevel { 0.0f }, postLimitLevel { 0.0f };
+    float meterDecayCoeff = 0.999f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MasterChain)
 };
