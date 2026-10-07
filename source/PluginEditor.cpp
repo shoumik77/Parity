@@ -32,6 +32,55 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     addAndMakeVisible (abSwitch);
     abSwitch.setTooltip ("Switch between listening to your mix and the reference track");
 
+    masterSectionLabel.setText ("MASTER", juce::dontSendNotification);
+    masterSectionLabel.setFont (ParityLookAndFeel::getLabelFont (12.0f));
+    masterSectionLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
+    addAndMakeVisible (masterSectionLabel);
+
+    for (auto* button : { &clipOnButton, &limitOnButton })
+    {
+        button->setClickingTogglesState (true);
+        addAndMakeVisible (*button);
+    }
+
+    clipOnButton.setTooltip ("Hard-clip the mix at the threshold (flat-top distortion). The reference is never processed");
+    limitOnButton.setTooltip ("Brickwall-limit the mix: GAIN pushes into the CEILING, REL sets recovery speed");
+
+    auto setUpSlider = [this] (juce::Slider& slider, const juce::String& suffix, const juce::String& tooltip)
+    {
+        slider.setSliderStyle (juce::Slider::LinearHorizontal);
+        slider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 62, 20);
+        slider.setTextValueSuffix (suffix);
+        slider.setTooltip (tooltip);
+        addAndMakeVisible (slider);
+    };
+
+    setUpSlider (clipThresholdSlider, " dB", "Clip threshold: samples beyond this level are chopped flat");
+    setUpSlider (limitGainSlider, " dB", "Gain into the limiter: push up for loudness, the ceiling catches the peaks");
+    setUpSlider (limitCeilingSlider, " dB", "Output ceiling the limiter never exceeds (keep around -1 dB for streaming)");
+    setUpSlider (limitReleaseSlider, " ms", "How fast the limiter recovers: short = louder but can distort, long = cleaner but pumps");
+
+    auto setUpSliderLabel = [this] (juce::Label& label, const juce::String& text)
+    {
+        label.setText (text, juce::dontSendNotification);
+        label.setFont (ParityLookAndFeel::getLabelFont (11.0f));
+        label.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
+        label.setJustificationType (juce::Justification::centredRight);
+        addAndMakeVisible (label);
+    };
+
+    setUpSliderLabel (limitGainLabel, "GAIN");
+    setUpSliderLabel (limitCeilingLabel, "CEIL");
+    setUpSliderLabel (limitReleaseLabel, "REL");
+
+    auto& params = processorRef.getParameters();
+    clipOnAttachment = std::make_unique<ButtonAttachment> (params, "clipOn", clipOnButton);
+    clipThresholdAttachment = std::make_unique<SliderAttachment> (params, "clipThreshold", clipThresholdSlider);
+    limitOnAttachment = std::make_unique<ButtonAttachment> (params, "limitOn", limitOnButton);
+    limitGainAttachment = std::make_unique<SliderAttachment> (params, "limitGain", limitGainSlider);
+    limitCeilingAttachment = std::make_unique<SliderAttachment> (params, "limitCeiling", limitCeilingSlider);
+    limitReleaseAttachment = std::make_unique<SliderAttachment> (params, "limitRelease", limitReleaseSlider);
+
     spectrumSectionLabel.setText ("SPECTRUM", juce::dontSendNotification);
     spectrumSectionLabel.setFont (ParityLookAndFeel::getLabelFont (12.0f));
     spectrumSectionLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
@@ -160,8 +209,8 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     startTimerHz (10);
 
     setResizable (true, true);
-    setResizeLimits (560, 584, 1100, 920);
-    setSize (700, 644);
+    setResizeLimits (560, 680, 1100, 1020);
+    setSize (700, 740);
 }
 
 ParityAudioProcessorEditor::~ParityAudioProcessorEditor()
@@ -218,6 +267,31 @@ void ParityAudioProcessorEditor::resized()
 
     // The centerpiece A/B switch.
     abSwitch.setBounds (area.removeFromTop (48));
+    area.removeFromTop (16);
+
+    // Master section: CLIP row, then LIMIT row.
+    masterSectionLabel.setBounds (area.removeFromTop (18));
+    area.removeFromTop (4);
+
+    auto clipRow = area.removeFromTop (26);
+    clipOnButton.setBounds (clipRow.removeFromLeft (52).reduced (0, 1));
+    clipRow.removeFromLeft (8);
+    clipThresholdSlider.setBounds (clipRow);
+    area.removeFromTop (6);
+
+    auto limitRow = area.removeFromTop (26);
+    limitOnButton.setBounds (limitRow.removeFromLeft (52).reduced (0, 1));
+
+    const auto limitSliderWidth = (limitRow.getWidth() - 3 * 42) / 3;
+
+    for (auto pair : { std::pair<juce::Label*, juce::Slider*> { &limitGainLabel, &limitGainSlider },
+                       { &limitCeilingLabel, &limitCeilingSlider },
+                       { &limitReleaseLabel, &limitReleaseSlider } })
+    {
+        pair.first->setBounds (limitRow.removeFromLeft (42));
+        pair.second->setBounds (limitRow.removeFromLeft (limitSliderWidth));
+    }
+
     area.removeFromTop (16);
 
     // Spectrum section: label + mode buttons on one strip, view below.

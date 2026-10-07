@@ -20,6 +20,11 @@ ParityLookAndFeel::ParityLookAndFeel()
     setColour (juce::ComboBox::outlineColourId, ink);
     setColour (juce::AlertWindow::backgroundColourId, cream);
     setColour (juce::AlertWindow::textColourId, ink);
+    setColour (juce::Slider::textBoxTextColourId, ink);
+    setColour (juce::Slider::textBoxOutlineColourId, panelLine);
+    setColour (juce::Slider::textBoxBackgroundColourId, cream);
+    setColour (juce::TextEditor::focusedOutlineColourId, accent);
+    setColour (juce::TextEditor::highlightColourId, accent.withAlpha (0.3f));
 }
 
 //==============================================================================
@@ -72,4 +77,38 @@ void ParityLookAndFeel::drawButtonBackground (juce::Graphics& g, juce::Button& b
 juce::Font ParityLookAndFeel::getTextButtonFont (juce::TextButton&, int buttonHeight)
 {
     return getLabelFont (juce::jmin (15.0f, (float) buttonHeight * 0.55f));
+}
+
+//==============================================================================
+void ParityLookAndFeel::drawLinearSlider (juce::Graphics& g, int x, int y, int width, int height,
+                                          float sliderPos, float minSliderPos, float maxSliderPos,
+                                          juce::Slider::SliderStyle style, juce::Slider& slider)
+{
+    if (style != juce::Slider::LinearHorizontal)
+    {
+        LookAndFeel_V4::drawLinearSlider (g, x, y, width, height, sliderPos,
+                                          minSliderPos, maxSliderPos, style, slider);
+        return;
+    }
+
+    const auto centreY = (float) y + (float) height * 0.5f;
+
+    // 1 px track with an accent fill up to the thumb.
+    g.setColour (panelLine);
+    g.fillRect ((float) x, centreY - 0.5f, (float) width, 1.0f);
+
+    g.setColour (slider.isEnabled() ? accent : inkFaint);
+    g.fillRect ((float) x, centreY - 0.5f, sliderPos - (float) x, 1.0f);
+
+    // Thumb: a slim vertical ink bar, test-instrument style.
+    constexpr float thumbWidth = 3.0f, thumbHeight = 14.0f;
+    g.setColour (slider.isEnabled() ? ink : inkFaint);
+    g.fillRect (sliderPos - thumbWidth * 0.5f, centreY - thumbHeight * 0.5f, thumbWidth, thumbHeight);
+}
+
+juce::Label* ParityLookAndFeel::createSliderTextBox (juce::Slider& slider)
+{
+    auto* label = LookAndFeel_V4::createSliderTextBox (slider);
+    label->setFont (getMonoFont (12.0f));
+    return label;
 }

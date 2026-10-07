@@ -35,6 +35,17 @@ private:
     juce::Label fileLabel;
     ABSwitch abSwitch;
 
+    juce::Label masterSectionLabel;
+    juce::TextButton clipOnButton { "CLIP" }, limitOnButton { "LIMIT" };
+    juce::Slider clipThresholdSlider, limitGainSlider, limitCeilingSlider, limitReleaseSlider;
+    juce::Label limitGainLabel, limitCeilingLabel, limitReleaseLabel;
+
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
+    std::unique_ptr<ButtonAttachment> clipOnAttachment, limitOnAttachment;
+    std::unique_ptr<SliderAttachment> clipThresholdAttachment, limitGainAttachment,
+                                      limitCeilingAttachment, limitReleaseAttachment;
+
     juce::Label spectrumSectionLabel;
     SpectrumView spectrumView;
     juce::Label viewModeLabel, meterModeLabel;

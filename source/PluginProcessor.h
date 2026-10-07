@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "Audio/LoudnessAnalyzer.h"
+#include "Audio/MasterChain.h"
 #include "Audio/ReferencePlayer.h"
 #include "Audio/SpectrumAnalyzer.h"
 #include "Audio/StereoAnalyzer.h"
@@ -83,7 +84,11 @@ public:
         return { referenceFileLufs.load(), referenceFilePeak.load() };
     }
 
+    juce::AudioProcessorValueTreeState& getParameters() noexcept  { return apvts; }
+
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
     //==============================================================================
     ReferencePlayer referencePlayer;
     std::atomic<bool> referenceActive { false };
@@ -101,6 +106,15 @@ private:
     juce::AudioBuffer<float> referenceBuffer;
     juce::SmoothedValue<float> referenceGain { 0.0f };
     double hostSampleRate = 44100.0;
+
+    juce::AudioProcessorValueTreeState apvts;
+    MasterChain masterChain;
+    std::atomic<float>* clipOnParam = nullptr;
+    std::atomic<float>* clipThresholdParam = nullptr;
+    std::atomic<float>* limitOnParam = nullptr;
+    std::atomic<float>* limitGainParam = nullptr;
+    std::atomic<float>* limitCeilingParam = nullptr;
+    std::atomic<float>* limitReleaseParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ParityAudioProcessor)
 };

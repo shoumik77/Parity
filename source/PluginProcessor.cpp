@@ -10,8 +10,37 @@ ParityAudioProcessor::ParityAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       )
+                       ),
+       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
+    clipOnParam        = apvts.getRawParameterValue ("clipOn");
+    clipThresholdParam = apvts.getRawParameterValue ("clipThreshold");
+    limitOnParam       = apvts.getRawParameterValue ("limitOn");
+    limitGainParam     = apvts.getRawParameterValue ("limitGain");
+    limitCeilingParam  = apvts.getRawParameterValue ("limitCeiling");
+    limitReleaseParam  = apvts.getRawParameterValue ("limitRelease");
+}
+
+juce::AudioProcessorValueTreeState::ParameterLayout ParityAudioProcessor::createParameterLayout()
+{
+    using FloatParam = juce::AudioParameterFloat;
+    using BoolParam = juce::AudioParameterBool;
+
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add (std::make_unique<BoolParam> ("clipOn", "Clip On", false));
+    layout.add (std::make_unique<FloatParam> ("clipThreshold", "Clip Threshold",
+                                              juce::NormalisableRange<float> (-20.0f, 0.0f, 0.1f), 0.0f));
+
+    layout.add (std::make_unique<BoolParam> ("limitOn", "Limit On", false));
+    layout.add (std::make_unique<FloatParam> ("limitGain", "Limit Gain",
+                                              juce::NormalisableRange<float> (-12.0f, 12.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<FloatParam> ("limitCeiling", "Limit Ceiling",
+                                              juce::NormalisableRange<float> (-12.0f, 0.0f, 0.1f), -1.0f));
+    layout.add (std::make_unique<FloatParam> ("limitRelease", "Limit Release",
+                                              juce::NormalisableRange<float> (1.0f, 1000.0f, 1.0f, 0.3f), 100.0f));
+
+    return layout;
 }
 
 ParityAudioProcessor::~ParityAudioProcessor()
@@ -98,6 +127,7 @@ void ParityAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     referenceSpectrum.prepare (sampleRate);
     mixStereo.prepare (sampleRate);
     referenceStereo.prepare (sampleRate);
+    masterChain.prepare (sampleRate, samplesPerBlock, juce::jmax (1, getTotalNumOutputChannels()));
 }
 
 void ParityAudioProcessor::releaseResources()
@@ -161,6 +191,13 @@ void ParityAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                 playheadSeconds = *seconds;
         }
     }
+
+    // Master processing applies to the mix only, ahead of the analyzer taps,
+    // so the meters read what would actually be rendered.
+    masterChain.setParameters (clipOnParam->load() > 0.5f, clipThresholdParam->load(),
+                               limitOnParam->load() > 0.5f, limitGainParam->load(),
+                               limitCeilingParam->load(), limitReleaseParam->load());
+    masterChain.process (buffer);
 
     // Measure the mix input while the host is playing (pre-crossfade so the
     // reading always reflects the actual mix, not what's being monitored).
@@ -227,6 +264,10 @@ void ParityAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     juce::XmlElement state ("ParityState");
     state.setAttribute ("referenceFile", referencePlayer.getFile().getFullPathName());
     state.setAttribute ("referenceActive", referenceActive.load());
+
+    if (auto paramsXml = apvts.copyState().createXml())
+        state.addChildElement (paramsXml.release());
+
     copyXmlToBinary (state, destData);
 }
 
@@ -242,6 +283,9 @@ void ParityAudioProcessor::setStateInformation (const void* data, int sizeInByte
                 loadReferenceFileAsync (file);
 
             referenceActive.store (state->getBoolAttribute ("referenceActive"));
+
+            if (auto* paramsXml = state->getChildByName (apvts.state.getType()))
+                apvts.replaceState (juce::ValueTree::fromXml (*paramsXml));
         }
     }
 }

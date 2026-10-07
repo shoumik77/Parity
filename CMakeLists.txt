@@ -27,6 +27,7 @@ target_sources(Parity PRIVATE
     source/PluginProcessor.cpp
     source/PluginEditor.cpp
     source/Audio/LoudnessAnalyzer.cpp
+    source/Audio/MasterChain.cpp
     source/Audio/ReferencePlayer.cpp
     source/Audio/SpectrumAnalyzer.cpp
     source/Audio/StereoAnalyzer.cpp

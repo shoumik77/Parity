@@ -38,4 +38,10 @@ public:
                                bool shouldDrawButtonAsDown) override;
 
     juce::Font getTextButtonFont (juce::TextButton&, int buttonHeight) override;
+
+    void drawLinearSlider (juce::Graphics&, int x, int y, int width, int height,
+                           float sliderPos, float minSliderPos, float maxSliderPos,
+                           juce::Slider::SliderStyle, juce::Slider&) override;
+
+    juce::Label* createSliderTextBox (juce::Slider&) override;
 };
