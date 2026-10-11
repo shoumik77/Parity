@@ -44,6 +44,9 @@ target_sources(Parity PRIVATE
     source/UI/ComparisonBar.cpp
     source/UI/ParityLookAndFeel.cpp
     source/UI/SpectrumView.cpp
+    source/UI/GainReductionMeter.cpp
+    source/UI/LoudnessHistoryView.cpp
+    source/UI/MasterHistoryView.cpp
     source/UI/VerticalFader.cpp
 )
 
@@ -104,6 +107,9 @@ target_sources(UICaptureTest PRIVATE
     source/UI/ComparisonBar.cpp
     source/UI/ParityLookAndFeel.cpp
     source/UI/SpectrumView.cpp
+    source/UI/GainReductionMeter.cpp
+    source/UI/LoudnessHistoryView.cpp
+    source/UI/MasterHistoryView.cpp
     source/UI/VerticalFader.cpp
 )
 

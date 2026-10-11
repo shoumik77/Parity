@@ -3,6 +3,9 @@
 #include "PluginProcessor.h"
 #include "UI/ABSwitch.h"
 #include "UI/ComparisonBar.h"
+#include "UI/GainReductionMeter.h"
+#include "UI/LoudnessHistoryView.h"
+#include "UI/MasterHistoryView.h"
 #include "UI/ParityLookAndFeel.h"
 #include "UI/SpectrumView.h"
 #include "UI/VerticalFader.h"
@@ -58,6 +61,9 @@ private:
     void updateStereoLabels();
     void updateMasterReadouts();
 
+    enum class MainView { spectrumOverlay, spectrumDifference, loudnessHistory, masterHistory };
+    void showView (MainView view);
+
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
     ParityAudioProcessor& processorRef;
@@ -77,11 +83,15 @@ private:
     juce::TextButton matchButton { "MATCH" };
     float referenceProgress = 0.0f;
 
-    // Spectrum toolbar + view
+    // Main view toolbar + the three swappable views
     juce::Label spectrumTitleLabel;
     SpectrumView spectrumView;
-    juce::TextButton overlayButton { "Overlay" }, differenceButton { "Difference" };
+    LoudnessHistoryView loudnessHistoryView;
+    MasterHistoryView masterHistoryView;
+    juce::TextButton overlayButton { "Overlay" }, differenceButton { "Difference" },
+                     loudnessButton { "Loudness" }, masterButton { "Master" };
     juce::TextButton realtimeButton { "Live" }, averageButton { "Avg" };
+    MainView currentView = MainView::spectrumOverlay;
 
     // Loudness table
     juce::Label loudnessTitleLabel;
@@ -102,8 +112,10 @@ private:
     juce::Label masterTitleLabel;
     juce::Label clipNameLabel, limitNameLabel;
     SectionPill clipPill, limitPill;
+    MasterHistoryView panelHistoryView;
     VerticalFader clipFader { true, 12 }, gainFader { false, 10 },
-                  ceilingFader { false, 10 }, releaseFader { true, 10 };
+                  ceilingFader { true, 10 }, releaseFader { false, 10 };
+    GainReductionMeter clipReductionMeter, limitReductionMeter;
     std::array<juce::Label, 4> faderValueLabels, faderUnitLabels, faderCaptionLabels;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

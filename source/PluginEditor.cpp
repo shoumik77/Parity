@@ -6,7 +6,10 @@
 //==============================================================================
 ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p),
-      spectrumView (p.getMixSpectrum(), p.getReferenceSpectrum())
+      spectrumView (p.getMixSpectrum(), p.getReferenceSpectrum()),
+      loudnessHistoryView (p.getMixLoudness(), p.getReferenceLoudness()),
+      masterHistoryView (p.getMasterChain(), MasterHistoryView::Mode::detailed),
+      panelHistoryView (p.getMasterChain(), MasterHistoryView::Mode::compact)
 {
     setLookAndFeel (&lookAndFeel);
 
@@ -51,9 +54,9 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     spectrumTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
     addAndMakeVisible (spectrumTitleLabel);
 
-    auto setUpModePair = [this] (juce::TextButton& first, juce::TextButton& second, int radioGroup)
+    auto setUpRadioGroup = [this] (std::initializer_list<juce::TextButton*> buttons, int radioGroup)
     {
-        for (auto* button : { &first, &second })
+        for (auto* button : buttons)
         {
             button->setRadioGroupId (radioGroup);
             button->setClickingTogglesState (true);
@@ -61,23 +64,31 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
         }
     };
 
-    setUpModePair (overlayButton, differenceButton, 1001);
-    setUpModePair (realtimeButton, averageButton, 1002);
+    setUpRadioGroup ({ &overlayButton, &differenceButton, &loudnessButton, &masterButton }, 1001);
+    setUpRadioGroup ({ &realtimeButton, &averageButton }, 1002);
 
     overlayButton.setToggleState (true, juce::dontSendNotification);
     realtimeButton.setToggleState (true, juce::dontSendNotification);
 
-    overlayButton.onClick = [this] { spectrumView.setDisplay (SpectrumView::Display::overlay); };
-    differenceButton.onClick = [this] { spectrumView.setDisplay (SpectrumView::Display::difference); };
+    overlayButton.onClick = [this] { showView (MainView::spectrumOverlay); };
+    differenceButton.onClick = [this] { showView (MainView::spectrumDifference); };
+    loudnessButton.onClick = [this] { showView (MainView::loudnessHistory); };
+    masterButton.onClick = [this] { showView (MainView::masterHistory); };
     realtimeButton.onClick = [this] { spectrumView.setAveraging (false); };
     averageButton.onClick = [this] { spectrumView.setAveraging (true); };
 
-    overlayButton.setTooltip ("Show mix and reference curves together");
-    differenceButton.setTooltip ("Show the dB difference per frequency (mix minus reference)");
+    overlayButton.setTooltip ("Spectrum: mix and reference curves together");
+    differenceButton.setTooltip ("Spectrum: dB difference per frequency (mix minus reference)");
+    loudnessButton.setTooltip ("Short-term loudness of mix and reference over the last 60 s");
+    masterButton.setTooltip ("What the clipper and limiter are doing: input vs threshold/ceiling over the last 6 s");
     realtimeButton.setTooltip ("Fast-moving spectrum that follows the audio");
     averageButton.setTooltip ("Slow long-term average, best for judging overall tonal balance");
 
     addAndMakeVisible (spectrumView);
+    addChildComponent (loudnessHistoryView);
+    addChildComponent (masterHistoryView);
+    loudnessHistoryView.setTooltip ("Solid: short-term (3 s). Faint: momentary (400 ms). Dashed: integrated");
+    masterHistoryView.setTooltip ("Grey: input level. Red: clipped away. Amber: limited away. Pale line: output");
 
     //==============================================================================
     // Loudness table
@@ -203,6 +214,14 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     for (auto* fader : { &clipFader, &gainFader, &ceilingFader, &releaseFader })
         addAndMakeVisible (*fader);
 
+    addAndMakeVisible (panelHistoryView);
+    panelHistoryView.setTooltip ("Last 3 s: grey = input, red = clipped away, amber = limited away. Open the Master tab for detail");
+
+    addAndMakeVisible (clipReductionMeter);
+    addAndMakeVisible (limitReductionMeter);
+    clipReductionMeter.setTooltip ("Clipper gain reduction: how far above the threshold the loudest peaks are");
+    limitReductionMeter.setTooltip ("Limiter gain reduction: how hard the limiter is pulling peaks down to the ceiling");
+
     const char* units[4] = { "dB", "dB", "dB", "ms" };
     const char* captions[4] = { "THRESHOLD", "GAIN", "CEIL", "REL" };
 
@@ -298,18 +317,19 @@ void ParityAudioProcessorEditor::paint (juce::Graphics& g)
                                 2.0f);
     }
 
-    // Spectrum toolbar legend: trace chips next to the title.
+    // Toolbar legend: trace chips next to the title (master view carries its own).
+    if (currentView != MainView::masterHistory)
     {
-        auto chip = legendArea.removeFromLeft (41.0f);
+        auto remaining = legendArea;
+        g.setFont (ParityLookAndFeel::getFont (10.0f, juce::Font::bold));
 
         for (auto entry : { std::pair<juce::Colour, const char*> { LF::inkSoft, "MIX" },
                             { LF::accent, "REF" } })
         {
+            auto chip = remaining.removeFromLeft (49.0f);
             g.setColour (entry.first);
             g.fillRect (chip.getX(), chip.getCentreY() - 1.0f, 16.0f, 2.0f);
-            g.setFont (ParityLookAndFeel::getFont (10.0f, juce::Font::bold));
             g.drawText (entry.second, chip.withTrimmedLeft (22.0f), juce::Justification::centredLeft);
-            chip = legendArea.withTrimmedLeft ((float) chip.getRight() - legendArea.getX());
         }
     }
 
@@ -356,8 +376,9 @@ void ParityAudioProcessorEditor::resized()
     // Floating master panel: fixed width at the right edge, spanning the
     // spectrum body down to the bottom of the window.
     const auto panelTop = headerArea.getBottom() + monitorArea.getHeight() + 48.0f;
-    masterPanelArea = { (float) width - 24.0f - 248.0f, panelTop,
-                        248.0f, (float) height - panelTop };
+    constexpr float panelWidth = 300.0f;
+    masterPanelArea = { (float) width - 24.0f - panelWidth, panelTop,
+                        panelWidth, (float) height - panelTop };
 
     //==============================================================================
     // Header internals
@@ -386,14 +407,19 @@ void ParityAudioProcessorEditor::resized()
 
     averageButton.setBounds (width - 24 - 44, toolbarY + 8, 44, 32);
     realtimeButton.setBounds (averageButton.getX() - 4 - 47, toolbarY + 8, 47, 32);
-    differenceButton.setBounds (realtimeButton.getX() - 16 - 79, toolbarY + 8, 79, 32);
+    masterButton.setBounds (realtimeButton.getX() - 16 - 64, toolbarY + 8, 64, 32);
+    loudnessButton.setBounds (masterButton.getX() - 4 - 76, toolbarY + 8, 76, 32);
+    differenceButton.setBounds (loudnessButton.getX() - 4 - 79, toolbarY + 8, 79, 32);
     overlayButton.setBounds (differenceButton.getX() - 4 - 66, toolbarY + 8, 66, 32);
 
     //==============================================================================
-    // Spectrum view (plot + axis gutters live inside the component)
-    spectrumView.setBounds (24, toolbarY + 48,
-                          juce::jmax (100, (int) masterPanelArea.getX() - 24 - 16 - 24),
-                          juce::jmax (80, (int) bottomStripArea.getY() - toolbarY - 48 - 12));
+    // Main view (plot + axis gutters live inside each component)
+    const juce::Rectangle<int> viewBounds (24, toolbarY + 48,
+                                           juce::jmax (100, (int) masterPanelArea.getX() - 24 - 16 - 24),
+                                           juce::jmax (80, (int) bottomStripArea.getY() - toolbarY - 48 - 12));
+    spectrumView.setBounds (viewBounds);
+    loudnessHistoryView.setBounds (viewBounds);
+    masterHistoryView.setBounds (viewBounds);
 
     //==============================================================================
     // Bottom strip: loudness 440 px, stereo fills to the master panel.
@@ -468,6 +494,10 @@ void ParityAudioProcessorEditor::resized()
         masterDivider = content.removeFromTop (1).toFloat();
         content.removeFromTop (12);
 
+        // Compact activity strip: what's being clipped / limited right now.
+        panelHistoryView.setBounds (content.removeFromTop (juce::jmax (40, content.getHeight() / 6)));
+        content.removeFromTop (12);
+
         auto processorRow = content;
 
         // Fixed bottom rows: value readouts, then captions.
@@ -480,31 +510,43 @@ void ParityAudioProcessorEditor::resized()
         auto headerRow = processorRow.removeFromTop (14);
         processorRow.removeFromTop (8);
 
-        auto clipHeader = headerRow.removeFromLeft (76);
-        clipNameLabel.setBounds (clipHeader.removeFromLeft (clipHeader.getWidth() / 2 - 2));
+        constexpr int clipColumnWidth = 92, reductionWidth = 24, faderGap = 4;
+
+        auto clipHeader = headerRow.removeFromLeft (clipColumnWidth);
+        clipNameLabel.setBounds (clipHeader.removeFromLeft (34));
         clipPill.setBounds (clipHeader.withTrimmedLeft (4).withWidth (29));
 
-        auto limitHeader = headerRow.withTrimmedLeft (1);
-        limitNameLabel.setBounds (limitHeader.removeFromLeft (limitHeader.getWidth() / 2 - 2));
+        auto limitHeader = headerRow.withTrimmedLeft (9);
+        limitNameLabel.setBounds (limitHeader.removeFromLeft (38));
         limitPill.setBounds (limitHeader.withTrimmedLeft (4).withWidth (29));
 
-        // CLIP column: 76 px, vertical divider, then LIMIT.
-        auto clipColumn = processorRow.removeFromLeft (76);
+        // CLIP column: fader + GR meter, vertical divider, then LIMIT.
+        auto clipColumn = processorRow.removeFromLeft (clipColumnWidth);
+        auto clipReductionArea = clipColumn.removeFromRight (reductionWidth);
+        clipColumn.removeFromRight (faderGap);
 
+        processorRow.removeFromLeft (4);
         masterColumnDivider = { (float) processorRow.getX(), (float) processorRow.getY() + 16.0f,
                                 1.0f, (float) processorRow.getHeight() - 16.0f };
+        processorRow.removeFromLeft (5);
 
-        auto limitColumn = processorRow.withTrimmedLeft (1);
+        auto limitReductionArea = processorRow.removeFromRight (reductionWidth);
+        auto limitColumn = processorRow;
 
-        // Faders fill the remaining height.
+        // Faders fill the remaining height; GR meters sit alongside, same height.
         clipFader.setBounds (clipColumn.withSizeKeepingCentre (44, clipColumn.getHeight()));
+        clipReductionMeter.setBounds (clipReductionArea);
+        limitReductionMeter.setBounds (limitReductionArea);
 
         const auto slotWidth = limitColumn.getWidth() / 3;
-        for (auto* fader : { &gainFader, &ceilingFader, &releaseFader })
-        {
-            auto slot = limitColumn.removeFromLeft (slotWidth);
-            fader->setBounds (slot.withSizeKeepingCentre (38, slot.getHeight()));
-        }
+        std::array<juce::Rectangle<int>, 3> limitSlots;
+
+        for (int i = 0; i < 3; ++i)
+            limitSlots[(size_t) i] = limitColumn.removeFromLeft (slotWidth);
+
+        gainFader.setBounds (limitSlots[0].withSizeKeepingCentre (38, limitSlots[0].getHeight()));
+        ceilingFader.setBounds (limitSlots[1].withSizeKeepingCentre (38, limitSlots[1].getHeight()));
+        releaseFader.setBounds (limitSlots[2].withSizeKeepingCentre (38, limitSlots[2].getHeight()));
 
         // Value + unit + caption labels under each fader.
         auto placeReadout = [&] (int index, juce::Rectangle<int> column)
@@ -514,18 +556,36 @@ void ParityAudioProcessorEditor::resized()
             faderCaptionLabels[(size_t) index].setBounds (column.getX(), captionRow.getY(), column.getWidth(), 13);
         };
 
-        placeReadout (0, clipColumn.withWidth (76));
+        placeReadout (0, clipColumn);
 
-        {
-            auto limitSlots = masterPanelArea.toNearestInt().reduced (16);
-            limitSlots.removeFromTop (12 + 12 + 1 + 12);
-            limitSlots.removeFromLeft (76 + 1);
-            limitSlots.removeFromTop (14 + 8); // header row + gap
-
-            for (int index = 1; index < 4; ++index)
-                placeReadout (index, limitSlots.removeFromLeft (slotWidth));
-        }
+        for (int i = 0; i < 3; ++i)
+            placeReadout (i + 1, limitSlots[(size_t) i]);
     }
+}
+
+void ParityAudioProcessorEditor::showView (MainView view)
+{
+    currentView = view;
+
+    const auto spectrum = view == MainView::spectrumOverlay || view == MainView::spectrumDifference;
+
+    if (spectrum)
+        spectrumView.setDisplay (view == MainView::spectrumOverlay ? SpectrumView::Display::overlay
+                                                                   : SpectrumView::Display::difference);
+
+    spectrumView.setVisible (spectrum);
+    loudnessHistoryView.setVisible (view == MainView::loudnessHistory);
+    masterHistoryView.setVisible (view == MainView::masterHistory);
+
+    // Live/Avg smoothing only applies to the spectrum.
+    realtimeButton.setEnabled (spectrum);
+    averageButton.setEnabled (spectrum);
+
+    spectrumTitleLabel.setText (spectrum ? "Spectrum"
+                              : view == MainView::loudnessHistory ? "Loudness"
+                                                                  : "Master",
+                                juce::dontSendNotification);
+    repaint();
 }
 
 void ParityAudioProcessorEditor::timerCallback()
@@ -559,12 +619,23 @@ void ParityAudioProcessorEditor::timerCallback()
         repaint (progressBarArea.toNearestInt().expanded (2));
     }
 
-    // Fader meters.
-    clipFader.setMeterLevel (processorRef.getMasterChain().getPostClipLevel());
-    const auto limitLevel = processorRef.getMasterChain().getPostLimitLevel();
-    gainFader.setMeterLevel (limitLevel);
-    ceilingFader.setMeterLevel (limitLevel);
-    releaseFader.setMeterLevel (limitLevel);
+    // Fader meters show each stage's *input* so overshoot past the handle is
+    // exactly what the stage removes; GR meters show how much.
+    const auto& chain = processorRef.getMasterChain();
+    const auto clipActive = clipPill.getToggleState();
+    const auto limitActive = limitPill.getToggleState();
+
+    clipFader.setMeterLevel (chain.getClipInputLevel());
+    clipFader.setProcessingActive (clipActive);
+    ceilingFader.setMeterLevel (chain.getPostClipLevel());
+    ceilingFader.setProcessingActive (limitActive);
+
+    clipReductionMeter.setReductionDb (chain.getClipReductionDb());
+    clipReductionMeter.setActive (clipActive);
+    limitReductionMeter.setReductionDb (chain.getLimitReductionDb());
+    limitReductionMeter.setActive (limitActive);
+
+    loudnessHistoryView.setReferenceIntegratedLufs (processorRef.getReferenceFileStats().integratedLufs);
 
     updateLoudnessLabels();
     updateStereoLabels();

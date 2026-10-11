@@ -5,6 +5,8 @@
 #include <array>
 #include <atomic>
 
+#include "HistoryBuffer.h"
+
 //==============================================================================
 /**
     EBU R128 / ITU-R BS.1770-4 loudness analyzer.
@@ -41,6 +43,19 @@ public:
 
     /** Analyzes an entire buffer offline (message/background thread). */
     static Stats analyzeBuffer (const juce::AudioBuffer<float>& buffer, double sampleRate);
+
+    //==============================================================================
+    /** One 100 ms step of loudness readings for the history graph. */
+    struct HistorySample
+    {
+        float momentaryLufs = silenceLufs;
+        float shortTermLufs = silenceLufs;
+    };
+
+    static constexpr int historyLength = 600; // 60 s at 100 ms per step
+    using History = HistoryBuffer<HistorySample, historyLength>;
+
+    const History& getHistory() const noexcept  { return history; }
 
 private:
     //==============================================================================
@@ -133,6 +148,8 @@ private:
     std::atomic<float> shortTermLufs { silenceLufs };
     std::atomic<float> integratedLufs { silenceLufs };
     std::atomic<float> truePeakDb { silenceLufs };
+
+    History history;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LoudnessAnalyzer)
 };

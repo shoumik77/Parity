@@ -18,6 +18,15 @@ void VerticalFader::setMeterLevel (float linearLevel)
     }
 }
 
+void VerticalFader::setProcessingActive (bool shouldBeActive)
+{
+    if (processingActive != shouldBeActive)
+    {
+        processingActive = shouldBeActive;
+        repaint();
+    }
+}
+
 void VerticalFader::paint (juce::Graphics& g)
 {
     using LF = ParityLookAndFeel;
@@ -35,40 +44,56 @@ void VerticalFader::paint (juce::Graphics& g)
     const auto trackArea = juce::Rectangle<float> (bounds.getX() + bounds.getWidth() * 0.5f - 2.0f,
                                                    0.0f, 4.0f, height);
 
+    const auto norm = (float) valueToProportionOfLength (getValue());
+    const auto handleY = height * (1.0f - norm);
+
     //==========================================================================
     if (meterVisible)
     {
         g.setColour (LF::control);
         g.fillRoundedRectangle (meterArea, 3.0f);
 
-        const auto levelDb = juce::Decibels::gainToDecibels (meterLevel, -60.0f);
-        const auto levelNorm = juce::jlimit (0.0f, 1.0f, (levelDb + 60.0f) / 60.0f);
+        // Map the meter onto the slider's own dB range so it lines up with the handle.
+        const auto levelDb = juce::Decibels::gainToDecibels (meterLevel, -100.0f);
+        const auto minDb = (float) getMinimum();
+        const auto maxDb = (float) getMaximum();
+        const auto levelNorm = juce::jlimit (0.0f, 1.0f, (levelDb - minDb) / (maxDb - minDb));
 
         if (levelNorm > 0.0f)
         {
-            auto fill = meterArea.withTrimmedTop (height * (1.0f - levelNorm));
+            const auto fillTop = height * (1.0f - levelNorm);
+            auto fill = meterArea.withTop (fillTop);
 
-            juce::ColourGradient gradient (LF::accent.withAlpha (0.9f), fill.getX(), fill.getBottom(),
+            // Below the handle: the signal that passes through untouched.
+            const auto passing = fill.withTop (juce::jmax (fillTop, handleY));
+
+            juce::ColourGradient gradient (LF::accent.withAlpha (0.9f), fill.getX(), height,
                                            LF::meterTop.withAlpha (0.9f), fill.getX(), 0.0f, false);
             gradient.addColour (0.6, LF::meterMid.withAlpha (0.9f));
             g.setGradientFill (gradient);
-            g.fillRect (fill);
+            g.fillRect (passing);
+
+            // Above the handle: the part being clipped / limited away.
+            if (fillTop < handleY)
+            {
+                g.setColour (processingActive ? LF::warn : LF::inkFaint.withAlpha (0.45f));
+                g.fillRect (fill.withBottom (handleY));
+            }
         }
 
-        if (meterLevel > overLevel)
+        // Hot cap when the input exceeds the top of the scale.
+        if (levelDb > maxDb)
         {
-            g.setColour (LF::meterHot.withAlpha (0.7f));
-            g.fillRect (meterArea.removeFromTop (16.0f));
+            g.setColour (LF::meterHot);
+            g.fillRoundedRectangle (meterArea.withHeight (4.0f), 2.0f);
         }
 
         g.setColour (LF::line);
-        g.drawRoundedRectangle (meterArea.reduced (0.5f).withHeight (height - 1.0f), 3.0f, 1.0f);
+        g.drawRoundedRectangle (meterArea.reduced (0.5f), 3.0f, 1.0f);
     }
 
     //==========================================================================
     // Tick marks to the right of the track.
-    g.setColour (LF::line);
-
     for (int tick = 1; tick <= 5; ++tick)
     {
         const auto y = height * (float) tick / 6.0f;
@@ -79,9 +104,6 @@ void VerticalFader::paint (juce::Graphics& g)
     }
 
     // Track with accent fill from the handle down.
-    const auto norm = (float) valueToProportionOfLength (getValue());
-    const auto handleY = height * (1.0f - norm);
-
     g.setColour (juce::Colour (0xff141412));
     g.fillRoundedRectangle (trackArea, 2.0f);
 
@@ -90,6 +112,13 @@ void VerticalFader::paint (juce::Graphics& g)
 
     g.setColour (LF::line);
     g.drawRoundedRectangle (trackArea.reduced (0.5f), 2.0f, 1.0f);
+
+    // Threshold line extending across the meter so the cut-off point is explicit.
+    if (meterVisible)
+    {
+        g.setColour (processingActive ? LF::warn.withAlpha (0.9f) : LF::inkFaint.withAlpha (0.5f));
+        g.fillRect (meterArea.getX(), handleY - 0.5f, meterArea.getWidth(), 1.0f);
+    }
 
     //==========================================================================
     // Handle: bordered block with three accent lines.

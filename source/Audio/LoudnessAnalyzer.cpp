@@ -215,6 +215,7 @@ void LoudnessAnalyzer::reset()
     shortTermLufs.store (silenceLufs);
     integratedLufs.store (silenceLufs);
     truePeakDb.store (silenceLufs);
+    history.clear();
 }
 
 void LoudnessAnalyzer::process (const juce::AudioBuffer<float>& buffer) noexcept
@@ -265,6 +266,8 @@ void LoudnessAnalyzer::process (const juce::AudioBuffer<float>& buffer) noexcept
 
         if (e.stepsFilled >= stepsPerShortTermWindow)
             shortTermLufs.store (energyToLoudness (windowEnergy (stepsPerShortTermWindow)));
+
+        history.push ({ momentaryLufs.load(), shortTermLufs.load() });
     });
 }
 
