@@ -12,7 +12,8 @@
     control with the pale active border.
 */
 class ABSwitch final : public juce::Component,
-                       public juce::SettableTooltipClient
+                       public juce::SettableTooltipClient,
+                       private juce::Timer
 {
 public:
     ABSwitch();
@@ -28,14 +29,19 @@ public:
     //==============================================================================
     void paint (juce::Graphics&) override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseMove (const juce::MouseEvent&) override;
+    void mouseExit (const juce::MouseEvent&) override;
     bool keyPressed (const juce::KeyPress&) override;
 
 private:
+    void timerCallback() override;
     void applyChange (bool shouldBeRef, juce::NotificationType notification);
     juce::Rectangle<float> segmentBounds (bool refSegment) const;
 
     bool referenceActive = false;
     bool referenceAvailable = false;
+    float slidePosition = 0.0f; // 0 = MIX, 1 = REF; animated towards the active segment
+    int hoveredSegment = -1;
 
     std::unique_ptr<juce::Drawable> checkDark, checkLight;
 

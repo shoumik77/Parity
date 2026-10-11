@@ -39,10 +39,24 @@ void ABSwitch::applyChange (bool shouldBeRef, juce::NotificationType notificatio
         return;
 
     referenceActive = shouldBeRef;
-    repaint();
+    startTimerHz (60);
 
     if (notification != juce::dontSendNotification && onChange != nullptr)
         onChange (referenceActive);
+}
+
+void ABSwitch::timerCallback()
+{
+    const auto target = referenceActive ? 1.0f : 0.0f;
+    slidePosition += (target - slidePosition) * 0.35f;
+
+    if (std::abs (target - slidePosition) < 0.01f)
+    {
+        slidePosition = target;
+        stopTimer();
+    }
+
+    repaint();
 }
 
 juce::Rectangle<float> ABSwitch::segmentBounds (bool refSegment) const
@@ -57,32 +71,72 @@ juce::Rectangle<float> ABSwitch::segmentBounds (bool refSegment) const
 //==============================================================================
 void ABSwitch::paint (juce::Graphics& g)
 {
+    using LF = ParityLookAndFeel;
     constexpr float cornerRadius = 6.0f;
 
-    // Dark tray behind the segments.
-    g.setColour (ParityLookAndFeel::background);
-    g.fillRoundedRectangle (getLocalBounds().toFloat(), cornerRadius);
+    LF::paintRecessed (g, getLocalBounds().toFloat(), cornerRadius + 2.0f);
 
-    auto drawSegment = [&] (bool refSegment)
+    const auto mixArea = segmentBounds (false);
+    const auto refArea = segmentBounds (true);
+
+    // Hover hint on the inactive segment.
+    if (hoveredSegment >= 0 && (hoveredSegment == 1) != referenceActive
+        && (hoveredSegment == 0 || referenceAvailable))
     {
-        const auto area = segmentBounds (refSegment);
+        g.setColour (juce::Colours::white.withAlpha (0.03f));
+        g.fillRoundedRectangle (hoveredSegment == 1 ? refArea : mixArea, cornerRadius);
+    }
+
+    // Sliding raised thumb; blends from pale (MIX) to accent (REF) as it moves.
+    const auto thumb = mixArea.withX (juce::jmap (slidePosition, mixArea.getX(), refArea.getX()));
+    const auto accentMix = slidePosition;
+
+    {
+        juce::Path shape;
+        shape.addRoundedRectangle (thumb, cornerRadius);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.5f), 6, { 0, 2 }).drawForPath (g, shape);
+    }
+
+    if (accentMix > 0.01f)
+    {
+        juce::ColourGradient fill (LF::accent.brighter (0.08f), 0.0f, thumb.getY(),
+                                   LF::accent.darker (0.08f), 0.0f, thumb.getBottom(), false);
+        g.setGradientFill (fill);
+        g.setOpacity (accentMix);
+        g.fillRoundedRectangle (thumb, cornerRadius);
+        g.setOpacity (1.0f);
+    }
+
+    if (accentMix < 0.99f)
+    {
+        g.saveState();
+        g.setOpacity (1.0f - accentMix);
+        LF::paintRaised (g, thumb, cornerRadius, false, false, true);
+        g.restoreState();
+    }
+    else
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.18f));
+        g.fillRect (thumb.getX() + 1.0f, thumb.getY() + 1.0f, thumb.getWidth() - 2.0f, 1.0f);
+        g.setColour (LF::accent.darker (0.3f));
+        g.drawRoundedRectangle (thumb.reduced (0.5f), cornerRadius, 1.0f);
+    }
+
+    auto drawLabel = [&] (bool refSegment)
+    {
+        const auto area = refSegment ? refArea : mixArea;
         const auto active = refSegment == referenceActive;
-        const auto accentFill = refSegment && active;
+        const auto onAccent = refSegment && active && accentMix > 0.5f;
 
-        g.setColour (accentFill ? ParityLookAndFeel::accent : ParityLookAndFeel::control);
-        g.fillRoundedRectangle (area, cornerRadius);
-        g.setColour (active && ! accentFill ? ParityLookAndFeel::inkFaint : ParityLookAndFeel::line);
-        g.drawRoundedRectangle (area.reduced (0.5f), cornerRadius, 1.0f);
-
-        auto textColour = accentFill ? ParityLookAndFeel::accentDark : ParityLookAndFeel::inkSoft;
+        auto textColour = onAccent ? LF::accentDark : active ? LF::ink : LF::inkFaint;
 
         if (refSegment && ! referenceAvailable)
-            textColour = ParityLookAndFeel::inkDim;
+            textColour = LF::inkMuted;
 
         const auto label = refSegment ? "REF" : "MIX";
-        g.setFont (ParityLookAndFeel::getFont (11.0f, active ? juce::Font::bold : juce::Font::plain));
+        g.setFont (active ? LF::getLabelFont (11.0f) : LF::getMediumFont (11.0f).withExtraKerningFactor (0.08f));
 
-        auto* check = accentFill ? checkDark.get() : checkLight.get();
+        auto* check = onAccent ? checkDark.get() : checkLight.get();
 
         if (active && check != nullptr)
         {
@@ -103,13 +157,37 @@ void ABSwitch::paint (juce::Graphics& g)
         }
     };
 
-    drawSegment (false);
-    drawSegment (true);
+    drawLabel (false);
+    drawLabel (true);
+
+    if (hasKeyboardFocus (true))
+    {
+        g.setColour (LF::accent.withAlpha (0.6f));
+        g.drawRoundedRectangle (getLocalBounds().toFloat().reduced (0.5f), cornerRadius + 2.0f, 1.0f);
+    }
 }
 
 void ABSwitch::mouseDown (const juce::MouseEvent& e)
 {
     applyChange (segmentBounds (true).contains (e.position), juce::sendNotification);
+}
+
+void ABSwitch::mouseMove (const juce::MouseEvent& e)
+{
+    const auto segment = segmentBounds (true).contains (e.position) ? 1
+                       : segmentBounds (false).contains (e.position) ? 0 : -1;
+
+    if (segment != hoveredSegment)
+    {
+        hoveredSegment = segment;
+        repaint();
+    }
+}
+
+void ABSwitch::mouseExit (const juce::MouseEvent&)
+{
+    hoveredSegment = -1;
+    repaint();
 }
 
 bool ABSwitch::keyPressed (const juce::KeyPress& key)

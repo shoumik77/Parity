@@ -7,15 +7,18 @@
 #include "UI/LoudnessHistoryView.h"
 #include "UI/MasterHistoryView.h"
 #include "UI/ParityLookAndFeel.h"
+#include "UI/PowerButton.h"
 #include "UI/SpectrumView.h"
+#include "UI/ValueReadout.h"
 #include "UI/VerticalFader.h"
 
 //==============================================================================
 /**
     Figma "Parity · Comparison" layout: header + monitoring strip on top,
-    spectrum plot in the middle, loudness/stereo analysis strip at the
-    bottom, and a floating master-processors panel on the right with
-    vertical faders.
+    a tabbed main view (spectrum / loudness history / master history) in the
+    middle, loudness/stereo analysis strip at the bottom, and a floating
+    master-processors panel on the right with vertical faders, GR meters and
+    an activity strip.
 */
 class ParityAudioProcessorEditor final : public juce::AudioProcessorEditor,
                                          private juce::Timer
@@ -31,27 +34,50 @@ public:
 
 private:
     //==============================================================================
-    /** Small pill toggle used for the CLIP/LIMIT bypass indicators. */
-    class SectionPill final : public juce::Button
+    /** Small LED that latches on and clears when clicked. */
+    class LatchedLed final : public juce::Component,
+                             public juce::SettableTooltipClient
     {
     public:
-        SectionPill() : juce::Button ({}) { setClickingTogglesState (true); }
-
-        void paintButton (juce::Graphics& g, bool highlighted, bool) override
+        void trigger()
         {
-            auto bounds = getLocalBounds().toFloat().reduced (0.5f);
-
-            g.setColour (ParityLookAndFeel::control.brighter (highlighted ? 0.08f : 0.0f));
-            g.fillRoundedRectangle (bounds, 3.0f);
-            g.setColour (ParityLookAndFeel::line);
-            g.drawRoundedRectangle (bounds, 3.0f, 1.0f);
-
-            const auto on = getToggleState();
-            g.setColour (on ? ParityLookAndFeel::accent : ParityLookAndFeel::inkFaint);
-            g.setFont (ParityLookAndFeel::getFont (8.0f, juce::Font::bold));
-            g.drawText (on ? "ON" : "BYP", bounds, juce::Justification::centred);
+            if (! lit)
+            {
+                lit = true;
+                repaint();
+            }
         }
+
+        void paint (juce::Graphics& g) override
+        {
+            ParityLookAndFeel::paintLed (g, getLocalBounds().toFloat().getCentre(), 3.5f,
+                                         ParityLookAndFeel::warn, lit);
+        }
+
+        void mouseDown (const juce::MouseEvent&) override
+        {
+            if (lit)
+            {
+                lit = false;
+                repaint();
+            }
+        }
+
+    private:
+        bool lit = false;
     };
+
+    //==============================================================================
+    /** 30 Hz timer for meters/faders/LEDs; the editor's own Timer runs the
+        10 Hz text updates. Keeps label churn off the animation path. */
+    struct MeterTimer final : juce::Timer
+    {
+        explicit MeterTimer (ParityAudioProcessorEditor& o) : owner (o) {}
+        void timerCallback() override  { owner.meterTick(); }
+        ParityAudioProcessorEditor& owner;
+    };
+
+    void meterTick();
 
     //==============================================================================
     void timerCallback() override;
@@ -59,7 +85,6 @@ private:
     void updateFileLabel();
     void updateLoudnessLabels();
     void updateStereoLabels();
-    void updateMasterReadouts();
 
     enum class MainView { spectrumOverlay, spectrumDifference, loudnessHistory, masterHistory };
     void showView (MainView view);
@@ -69,14 +94,14 @@ private:
     ParityAudioProcessor& processorRef;
 
     ParityLookAndFeel lookAndFeel;
+    MeterTimer meterTimer { *this };
 
     //==============================================================================
     // Header strip
     juce::Label titleLabel;
     juce::Label fileLabel;
     juce::TextButton loadButton { "Load Reference" };
-    std::unique_ptr<juce::Drawable> audioLinesIcon, folderIcon, settingsIcon,
-                                    pauseIcon, checkIcon;
+    std::unique_ptr<juce::Drawable> audioLinesIcon, folderIcon, settingsIcon, pauseIcon;
 
     // Monitoring strip
     ABSwitch abSwitch;
@@ -99,7 +124,7 @@ private:
     std::array<juce::Label, numLoudnessRows> rowLabels;
     std::array<juce::Label, numLoudnessRows> mixValueLabels, refValueLabels, deltaLabels;
     juce::Label mixHeader, refHeader, deltaHeader;
-    juce::Label peakWarningLabel;
+    LatchedLed mixPeakLed, refPeakLed;
 
     // Stereo section
     juce::Label stereoTitleLabel;
@@ -111,12 +136,13 @@ private:
     // Master processors panel
     juce::Label masterTitleLabel;
     juce::Label clipNameLabel, limitNameLabel;
-    SectionPill clipPill, limitPill;
+    LatchedLed clipLed;
+    PowerButton clipPower, limitPower;
     MasterHistoryView panelHistoryView;
     VerticalFader clipFader { true, 12 }, gainFader { false, 10 },
                   ceilingFader { true, 10 }, releaseFader { false, 10 };
     GainReductionMeter clipReductionMeter, limitReductionMeter;
-    std::array<juce::Label, 4> faderValueLabels, faderUnitLabels, faderCaptionLabels;
+    std::array<std::unique_ptr<ValueReadout>, 4> faderReadouts;
 
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;

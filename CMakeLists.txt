@@ -30,6 +30,12 @@ juce_add_binary_data(ParityAssets SOURCES
     assets/icons/folder-open.svg
     assets/icons/pause.svg
     assets/icons/settings.svg
+    assets/fonts/Inter-Regular.ttf
+    assets/fonts/Inter-Medium.ttf
+    assets/fonts/Inter-SemiBold.ttf
+    assets/fonts/Inter-Bold.ttf
+    assets/fonts/JetBrainsMono-Regular.ttf
+    assets/fonts/JetBrainsMono-Medium.ttf
 )
 
 target_sources(Parity PRIVATE
@@ -45,6 +51,8 @@ target_sources(Parity PRIVATE
     source/UI/ParityLookAndFeel.cpp
     source/UI/SpectrumView.cpp
     source/UI/GainReductionMeter.cpp
+    source/UI/PowerButton.cpp
+    source/UI/ValueReadout.cpp
     source/UI/LoudnessHistoryView.cpp
     source/UI/MasterHistoryView.cpp
     source/UI/VerticalFader.cpp
@@ -108,6 +116,8 @@ target_sources(UICaptureTest PRIVATE
     source/UI/ParityLookAndFeel.cpp
     source/UI/SpectrumView.cpp
     source/UI/GainReductionMeter.cpp
+    source/UI/PowerButton.cpp
+    source/UI/ValueReadout.cpp
     source/UI/LoudnessHistoryView.cpp
     source/UI/MasterHistoryView.cpp
     source/UI/VerticalFader.cpp

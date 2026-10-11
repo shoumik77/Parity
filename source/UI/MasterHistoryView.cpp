@@ -40,10 +40,12 @@ void MasterHistoryView::paint (juce::Graphics& g)
     const auto plot = bounds;
 
     // Background + grid.
-    g.setColour (detailed ? LF::background : LF::control);
-    g.fillRoundedRectangle (plot, detailed ? 0.0f : 4.0f);
+    if (detailed)
+        LF::paintRecessed (g, plot, 4.0f);
+    else
+        LF::paintRecessed (g, plot, 5.0f);
 
-    g.setFont (LF::getFont (10.0f));
+    g.setFont (LF::getMonoFont (9.5f));
 
     for (float db = 0.0f; db >= minDb; db -= 6.0f)
     {
@@ -87,11 +89,15 @@ void MasterHistoryView::paint (juce::Graphics& g)
 
     if (shown < 2)
     {
-        g.setColour (LF::inkDim);
-        g.setFont (LF::getFont (detailed ? 12.0f : 10.0f));
-        g.drawText (detailed ? "Press play in your DAW to see what the clipper and limiter are doing"
-                             : "no signal",
-                    plot, juce::Justification::centred);
+        if (detailed)
+            LF::paintEmptyState (g, plot, juce::String::fromUTF8 ("\xe2\x96\xb6"),
+                                 "Press play to see what the clipper and limiter are doing");
+        else
+        {
+            g.setColour (LF::inkDim);
+            g.setFont (LF::getMonoFont (9.0f));
+            g.drawText ("no signal", plot, juce::Justification::centred);
+        }
         return;
     }
 
@@ -173,8 +179,7 @@ void MasterHistoryView::paint (juce::Graphics& g)
     }
 
     // Output envelope on top so the delivered level is always readable.
-    g.setColour (LF::inkSoft.withAlpha (0.9f));
-    g.strokePath (outputLine, juce::PathStrokeType (1.0f));
+    LF::strokeWithGlow (g, outputLine, LF::inkSoft.withAlpha (0.9f), 1.0f, 2.0f, 0.14f);
 
     if (latest.clipActive)
     {
@@ -206,7 +211,7 @@ void MasterHistoryView::paint (juce::Graphics& g)
         if (lineStyle)
             g.fillRect (readout.getX(), readout.getCentreY() - 1.0f, 14.0f, 2.0f);
         else
-            g.fillRect (readout.getX(), readout.getY() + 2.0f, 10.0f, readout.getHeight() - 4.0f);
+            g.fillRoundedRectangle (readout.getX(), readout.getY() + 2.0f, 10.0f, readout.getHeight() - 4.0f, 1.5f);
 
         readout.removeFromLeft (lineStyle ? 20.0f : 16.0f);
         g.setFont (LF::getFont (10.0f, juce::Font::bold));
@@ -237,7 +242,7 @@ void MasterHistoryView::paint (juce::Graphics& g)
     else
         status << "Limiter bypassed";
 
-    g.setFont (LF::getFont (11.0f));
+    g.setFont (LF::getMonoFont (10.5f));
     g.setColour (LF::inkFaint);
     g.drawText (status, readout, juce::Justification::centredRight);
 }

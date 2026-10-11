@@ -17,17 +17,17 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     folderIcon     = ParityLookAndFeel::loadIcon (BinaryData::folderopen_svg, BinaryData::folderopen_svgSize);
     settingsIcon   = ParityLookAndFeel::loadIcon (BinaryData::settings_svg, BinaryData::settings_svgSize);
     pauseIcon      = ParityLookAndFeel::loadIcon (BinaryData::pause_svg, BinaryData::pause_svgSize);
-    checkIcon      = ParityLookAndFeel::loadIcon (BinaryData::checklight_svg, BinaryData::checklight_svgSize);
 
     //==============================================================================
     // Header
     titleLabel.setText ("PARITY", juce::dontSendNotification);
-    titleLabel.setFont (ParityLookAndFeel::getFont (20.0f, juce::Font::bold));
+    titleLabel.setFont (ParityLookAndFeel::getLabelFont (13.0f));
     titleLabel.setJustificationType (juce::Justification::centredLeft);
     addAndMakeVisible (titleLabel);
 
     fileLabel.setJustificationType (juce::Justification::centredLeft);
-    fileLabel.setFont (ParityLookAndFeel::getFont (12.0f));
+    fileLabel.setFont (ParityLookAndFeel::getMediumFont (11.5f));
+    fileLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
     addAndMakeVisible (fileLabel);
     updateFileLabel();
 
@@ -48,10 +48,11 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     addAndMakeVisible (matchButton);
 
     //==============================================================================
-    // Spectrum toolbar
+    // Spectrum toolbar — view buttons are text tabs with a sliding accent
+    // underline (drawn in paintOverChildren).
     spectrumTitleLabel.setText ("Spectrum", juce::dontSendNotification);
-    spectrumTitleLabel.setFont (ParityLookAndFeel::getFont (13.0f, juce::Font::bold));
-    spectrumTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
+    spectrumTitleLabel.setFont (ParityLookAndFeel::getLabelFont (10.0f));
+    spectrumTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
     addAndMakeVisible (spectrumTitleLabel);
 
     auto setUpRadioGroup = [this] (std::initializer_list<juce::TextButton*> buttons, int radioGroup)
@@ -91,10 +92,10 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     masterHistoryView.setTooltip ("Grey: input level. Red: clipped away. Amber: limited away. Pale line: output");
 
     //==============================================================================
-    // Loudness table
-    loudnessTitleLabel.setText ("Loudness", juce::dontSendNotification);
-    loudnessTitleLabel.setFont (ParityLookAndFeel::getFont (13.0f, juce::Font::bold));
-    loudnessTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
+    // Loudness table — section titles demoted to small caps, numbers mono.
+    loudnessTitleLabel.setText ("LOUDNESS", juce::dontSendNotification);
+    loudnessTitleLabel.setFont (ParityLookAndFeel::getLabelFont (10.0f));
+    loudnessTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
     addAndMakeVisible (loudnessTitleLabel);
 
     const char* rowNames[numLoudnessRows] = { "Momentary LUFS", "Short-Term LUFS",
@@ -117,17 +118,17 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
         for (auto* label : { &mixValueLabels[(size_t) row], &refValueLabels[(size_t) row], &deltaLabels[(size_t) row] })
         {
             label->setJustificationType (juce::Justification::centredRight);
-            label->setFont (ParityLookAndFeel::getFont (18.0f));
+            label->setFont (ParityLookAndFeel::getMonoFont (16.0f));
             addAndMakeVisible (*label);
         }
 
-        deltaLabels[(size_t) row].setFont (ParityLookAndFeel::getFont (17.0f));
+        deltaLabels[(size_t) row].setFont (ParityLookAndFeel::getMonoFont (15.0f));
     }
 
     auto setUpHeader = [this] (juce::Label& label, const juce::String& text, juce::Colour colour)
     {
         label.setText (text, juce::dontSendNotification);
-        label.setFont (ParityLookAndFeel::getFont (10.0f, juce::Font::bold));
+        label.setFont (ParityLookAndFeel::getLabelFont (9.0f));
         label.setJustificationType (juce::Justification::centredRight);
         label.setColour (juce::Label::textColourId, colour);
         addAndMakeVisible (label);
@@ -138,14 +139,17 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     setUpHeader (deltaHeader, juce::String::fromUTF8 ("Δ LU / dB"), ParityLookAndFeel::inkGhost);
     deltaHeader.setTooltip ("Difference: mix minus reference. Positive means the mix is higher");
 
-    peakWarningLabel.setText ("", juce::dontSendNotification);
-    addAndMakeVisible (peakWarningLabel);
+    // Latching clip LEDs on the true-peak row — click to reset.
+    mixPeakLed.setTooltip ("Latches when the mix exceeds -0.1 dBTP (intersample overs). Click to reset");
+    refPeakLed.setTooltip ("Latches when the reference exceeds -0.1 dBTP (intersample overs). Click to reset");
+    addAndMakeVisible (mixPeakLed);
+    addAndMakeVisible (refPeakLed);
 
     //==============================================================================
     // Stereo section
-    stereoTitleLabel.setText ("Stereo", juce::dontSendNotification);
-    stereoTitleLabel.setFont (ParityLookAndFeel::getFont (13.0f, juce::Font::bold));
-    stereoTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
+    stereoTitleLabel.setText ("STEREO", juce::dontSendNotification);
+    stereoTitleLabel.setFont (ParityLookAndFeel::getLabelFont (10.0f));
+    stereoTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
     addAndMakeVisible (stereoTitleLabel);
 
     setUpHeader (stereoMixHeader, "MIX", ParityLookAndFeel::ink);
@@ -159,7 +163,8 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
 
     for (auto* label : { &correlationNameLabel, &widthNameLabel })
     {
-        label->setFont (ParityLookAndFeel::getFont (13.0f));
+        label->setFont (ParityLookAndFeel::getMediumFont (11.5f));
+        label->setColour (juce::Label::textColourId, ParityLookAndFeel::inkFaint);
         addAndMakeVisible (*label);
     }
 
@@ -167,12 +172,12 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
         for (auto* label : { &stereoMixValues[(size_t) row], &stereoRefValues[(size_t) row], &stereoDeltaValues[(size_t) row] })
         {
             label->setJustificationType (juce::Justification::centredRight);
-            label->setFont (ParityLookAndFeel::getFont (18.0f));
+            label->setFont (ParityLookAndFeel::getMonoFont (16.0f));
             addAndMakeVisible (*label);
         }
 
     for (auto* label : { &stereoDeltaValues[0], &stereoDeltaValues[1] })
-        label->setFont (ParityLookAndFeel::getFont (17.0f));
+        label->setFont (ParityLookAndFeel::getMonoFont (15.0f));
 
     correlationBar.setScaleLabels (juce::String::fromUTF8 ("−1"), "0", "+1");
     correlationBar.setFillAnchor (0.5f);
@@ -186,25 +191,28 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
     //==============================================================================
     // Master processors panel
     masterTitleLabel.setText ("MASTER", juce::dontSendNotification);
-    masterTitleLabel.setFont (ParityLookAndFeel::getFont (10.0f, juce::Font::bold));
-    masterTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkMuted);
+    masterTitleLabel.setFont (ParityLookAndFeel::getLabelFont (10.0f));
+    masterTitleLabel.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
     addAndMakeVisible (masterTitleLabel);
+
+    clipLed.setTooltip ("Latches while the clipper is working. Click to reset");
+    addAndMakeVisible (clipLed);
 
     clipNameLabel.setText ("CLIP", juce::dontSendNotification);
     limitNameLabel.setText ("LIMIT", juce::dontSendNotification);
 
     for (auto* label : { &clipNameLabel, &limitNameLabel })
     {
-        label->setFont (ParityLookAndFeel::getFont (11.0f, juce::Font::bold));
+        label->setFont (ParityLookAndFeel::getLabelFont (10.5f));
         label->setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
         label->setJustificationType (juce::Justification::centred);
         addAndMakeVisible (*label);
     }
 
-    addAndMakeVisible (clipPill);
-    addAndMakeVisible (limitPill);
-    clipPill.setTooltip ("Hard-clip the mix at the threshold (flat-top distortion). The reference is never processed");
-    limitPill.setTooltip ("Brickwall-limit the mix: GAIN pushes into the CEIL, REL sets recovery speed");
+    addAndMakeVisible (clipPower);
+    addAndMakeVisible (limitPower);
+    clipPower.setTooltip ("Hard-clip the mix at the threshold (flat-top distortion). The reference is never processed");
+    limitPower.setTooltip ("Brickwall-limit the mix: GAIN pushes into the CEIL, REL sets recovery speed");
 
     clipFader.setTooltip ("Clip threshold: samples beyond this level are chopped flat");
     gainFader.setTooltip ("Gain into the limiter: push up for loudness, the ceiling catches the peaks");
@@ -224,38 +232,49 @@ ParityAudioProcessorEditor::ParityAudioProcessorEditor (ParityAudioProcessor& p)
 
     const char* units[4] = { "dB", "dB", "dB", "ms" };
     const char* captions[4] = { "THRESHOLD", "GAIN", "CEIL", "REL" };
+    VerticalFader* faders[4] = { &clipFader, &gainFader, &ceilingFader, &releaseFader };
 
     for (int i = 0; i < 4; ++i)
     {
-        auto& value = faderValueLabels[(size_t) i];
-        value.setFont (ParityLookAndFeel::getFont (14.0f, juce::Font::bold));
-        value.setColour (juce::Label::textColourId, ParityLookAndFeel::ink);
-        value.setJustificationType (juce::Justification::centred);
-        addAndMakeVisible (value);
-
-        auto& unit = faderUnitLabels[(size_t) i];
-        unit.setText (units[i], juce::dontSendNotification);
-        unit.setFont (ParityLookAndFeel::getFont (10.0f));
-        unit.setJustificationType (juce::Justification::centred);
-        addAndMakeVisible (unit);
-
-        auto& caption = faderCaptionLabels[(size_t) i];
-        caption.setText (captions[i], juce::dontSendNotification);
-        caption.setFont (ParityLookAndFeel::getFont (11.0f));
-        caption.setJustificationType (juce::Justification::centred);
-        addAndMakeVisible (caption);
+        faderReadouts[(size_t) i] = std::make_unique<ValueReadout> (*faders[i], units[i], captions[i]);
+        addAndMakeVisible (*faderReadouts[(size_t) i]);
     }
+
+    // Dim a section's controls while it is bypassed.
+    auto applyBypassDimming = [this]
+    {
+        const float clipAlpha = clipPower.getToggleState() ? 1.0f : 0.4f;
+        const float limitAlpha = limitPower.getToggleState() ? 1.0f : 0.4f;
+
+        clipFader.setAlpha (clipAlpha);
+        clipReductionMeter.setAlpha (clipAlpha);
+        faderReadouts[0]->setAlpha (clipAlpha);
+
+        gainFader.setAlpha (limitAlpha);
+        ceilingFader.setAlpha (limitAlpha);
+        releaseFader.setAlpha (limitAlpha);
+        limitReductionMeter.setAlpha (limitAlpha);
+
+        for (int i = 1; i < 4; ++i)
+            faderReadouts[(size_t) i]->setAlpha (limitAlpha);
+    };
+
+    clipPower.onStateChange = applyBypassDimming;
+    limitPower.onStateChange = applyBypassDimming;
 
     auto& params = processorRef.getParameters();
     matchAttachment = std::make_unique<ButtonAttachment> (params, "matchOn", matchButton);
-    clipOnAttachment = std::make_unique<ButtonAttachment> (params, "clipOn", clipPill);
+    clipOnAttachment = std::make_unique<ButtonAttachment> (params, "clipOn", clipPower);
     clipThresholdAttachment = std::make_unique<SliderAttachment> (params, "clipThreshold", clipFader);
-    limitOnAttachment = std::make_unique<ButtonAttachment> (params, "limitOn", limitPill);
+    limitOnAttachment = std::make_unique<ButtonAttachment> (params, "limitOn", limitPower);
     limitGainAttachment = std::make_unique<SliderAttachment> (params, "limitGain", gainFader);
     limitCeilingAttachment = std::make_unique<SliderAttachment> (params, "limitCeiling", ceilingFader);
     limitReleaseAttachment = std::make_unique<SliderAttachment> (params, "limitRelease", releaseFader);
 
+    applyBypassDimming();
+
     startTimerHz (10);
+    meterTimer.startTimerHz (30);
 
     setResizable (true, false);
     setResizeLimits (920, 640, 1500, 1100);
@@ -272,23 +291,22 @@ void ParityAudioProcessorEditor::paint (juce::Graphics& g)
 {
     using LF = ParityLookAndFeel;
 
-    g.fillAll (LF::background);
+    LF::paintBackground (g, getLocalBounds());
 
     // Section backgrounds.
-    g.setColour (LF::panel);
+    g.setColour (LF::panel.withAlpha (0.55f));
     g.fillRect (monitorArea);
     g.fillRect (bottomStripArea);
 
-    // Hairline rules between sections.
-    g.setColour (LF::line);
-    g.drawHorizontalLine ((int) headerArea.getBottom() - 1, 0.0f, (float) getWidth());
-    g.drawHorizontalLine ((int) monitorArea.getBottom() - 1, 0.0f, (float) getWidth());
-    g.drawHorizontalLine ((int) bottomStripArea.getY(), 0.0f, (float) getWidth());
-    g.drawVerticalLine ((int) loudnessArea.getRight(), bottomStripArea.getY(), bottomStripArea.getBottom());
-    g.drawVerticalLine ((int) stereoArea.getRight(), bottomStripArea.getY(), bottomStripArea.getBottom());
+    // Engraved rules between sections.
+    LF::paintRule (g, { 0.0f, headerArea.getBottom() - 1.0f, (float) getWidth(), 2.0f }, false);
+    LF::paintRule (g, { 0.0f, monitorArea.getBottom() - 1.0f, (float) getWidth(), 2.0f }, false);
+    LF::paintRule (g, { 0.0f, bottomStripArea.getY() - 1.0f, (float) getWidth(), 2.0f }, false);
+    LF::paintRule (g, { loudnessArea.getRight() - 1.0f, bottomStripArea.getY(), 2.0f, bottomStripArea.getHeight() }, true);
+    LF::paintRule (g, { stereoArea.getRight() - 1.0f, bottomStripArea.getY(), 2.0f, bottomStripArea.getHeight() }, true);
 
     // Header: title divider, file icon, load-button icon, settings gear.
-    g.drawVerticalLine (113, headerArea.getY() + 18.0f, headerArea.getY() + 38.0f);
+    LF::paintRule (g, { 112.0f, headerArea.getY() + 17.0f, 2.0f, 22.0f }, true);
 
     if (audioLinesIcon != nullptr)
         audioLinesIcon->drawWithin (g, fileIconArea, juce::RectanglePlacement::centred, 1.0f);
@@ -300,20 +318,21 @@ void ParityAudioProcessorEditor::paint (juce::Graphics& g)
         settingsIcon->drawWithin (g, settingsIconArea, juce::RectanglePlacement::centred, 0.9f);
 
     // Monitoring strip: divider, transport pause icon + progress bar.
-    g.drawVerticalLine (212, monitorArea.getY() + 16.0f, monitorArea.getY() + 48.0f);
+    LF::paintRule (g, { 211.0f, monitorArea.getY() + 15.0f, 2.0f, 34.0f }, true);
 
     if (pauseIcon != nullptr)
         pauseIcon->drawWithin (g, transportIconArea, juce::RectanglePlacement::centred,
                                processorRef.isHostPlaying() ? 1.0f : 0.4f);
 
-    g.setColour (LF::line);
-    g.fillRoundedRectangle (progressBarArea, 2.0f);
+    // Recessed progress well with accent fill.
+    LF::paintRecessed (g, progressBarArea.expanded (0.0f, 1.0f), 2.5f);
 
     if (referenceProgress > 0.0f)
     {
         g.setColour (LF::accent);
-        g.fillRoundedRectangle (progressBarArea.withWidth (progressBarArea.getWidth()
-                                                             * juce::jlimit (0.0f, 1.0f, referenceProgress)),
+        g.fillRoundedRectangle (progressBarArea.expanded (0.0f, 1.0f)
+                                    .withWidth ((progressBarArea.getWidth())
+                                                * juce::jlimit (0.0f, 1.0f, referenceProgress)),
                                 2.0f);
     }
 
@@ -321,46 +340,57 @@ void ParityAudioProcessorEditor::paint (juce::Graphics& g)
     if (currentView != MainView::masterHistory)
     {
         auto remaining = legendArea;
-        g.setFont (ParityLookAndFeel::getFont (10.0f, juce::Font::bold));
+        g.setFont (ParityLookAndFeel::getLabelFont (9.0f));
 
         for (auto entry : { std::pair<juce::Colour, const char*> { LF::inkSoft, "MIX" },
                             { LF::accent, "REF" } })
         {
             auto chip = remaining.removeFromLeft (49.0f);
             g.setColour (entry.first);
-            g.fillRect (chip.getX(), chip.getCentreY() - 1.0f, 16.0f, 2.0f);
+            g.fillRoundedRectangle (chip.getX(), chip.getCentreY() - 1.0f, 16.0f, 2.0f, 1.0f);
+            g.setColour (LF::inkFaint);
             g.drawText (entry.second, chip.withTrimmedLeft (22.0f), juce::Justification::centredLeft);
         }
     }
 
-    // Master panel card.
+    // Master panel card with soft drop shadow.
     if (! masterPanelArea.isEmpty())
     {
-        g.setColour (LF::panel);
-        g.fillRoundedRectangle (masterPanelArea, 8.0f);
-        g.setColour (LF::line);
-        g.drawRoundedRectangle (masterPanelArea.reduced (0.5f), 8.0f, 1.0f);
+        LF::paintCard (g, masterPanelArea, 8.0f);
 
-        g.fillRect (masterDivider);
-        g.fillRect (masterColumnDivider);
-    }
-
-    // Peak warning dot under the loudness table when a channel is over 0 dBTP.
-    if (peakWarningLabel.getText().isNotEmpty())
-    {
-        g.setColour (LF::warn);
-        g.fillEllipse (loudnessArea.getX() + 24.0f, bottomStripArea.getBottom() - 24.0f, 4.0f, 4.0f);
+        LF::paintRule (g, masterDivider.expanded (0.0f, 0.5f), false);
+        LF::paintRule (g, masterColumnDivider.expanded (0.5f, 0.0f), true);
     }
 }
 
 void ParityAudioProcessorEditor::paintOverChildren (juce::Graphics& g)
 {
-    // Check mark inside the MATCH toggle when loudness matching is on.
-    if (matchButton.getToggleState() && checkIcon != nullptr)
+    using LF = ParityLookAndFeel;
+
+    // Glowing LED inside the MATCH toggle when loudness matching is on.
+    if (matchButton.getToggleState())
     {
-        auto iconArea = matchButton.getBounds().toFloat();
-        iconArea = juce::Rectangle<float> (iconArea.getX() + 13.5f, iconArea.getY() + 10.0f, 12.0f, 12.0f);
-        checkIcon->drawWithin (g, iconArea, juce::RectanglePlacement::centred, 1.0f);
+        const auto b = matchButton.getBounds().toFloat();
+        LF::paintLed (g, { b.getX() + 14.0f, b.getCentreY() }, 3.0f, LF::accent, true);
+    }
+
+    // Accent underline under the active view tab.
+    juce::TextButton* activeTab = nullptr;
+
+    switch (currentView)
+    {
+        case MainView::spectrumOverlay:    activeTab = &overlayButton;    break;
+        case MainView::spectrumDifference: activeTab = &differenceButton; break;
+        case MainView::loudnessHistory:    activeTab = &loudnessButton;   break;
+        case MainView::masterHistory:      activeTab = &masterButton;     break;
+    }
+
+    if (activeTab != nullptr)
+    {
+        const auto b = activeTab->getBounds().toFloat();
+        juce::Rectangle<float> underline (b.getX() + 6.0f, b.getBottom() - 4.0f, b.getWidth() - 12.0f, 2.0f);
+        g.setColour (LF::accent);
+        g.fillRoundedRectangle (underline, 1.0f);
     }
 }
 
@@ -447,8 +477,19 @@ void ParityAudioProcessorEditor::resized()
         {
             auto rowArea = content.removeFromTop (36);
             rowLabels[(size_t) row].setBounds (rowArea.removeFromLeft (148).withTrimmedTop (10));
-            mixValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (84).withTrimmedTop (7));
-            refValueLabels[(size_t) row].setBounds (rowArea.removeFromLeft (84).withTrimmedTop (7));
+
+            auto mixColumn = rowArea.removeFromLeft (84);
+            auto refColumn = rowArea.removeFromLeft (84);
+
+            if (row == numLoudnessRows - 1)
+            {
+                // Latching clip LEDs sit at the right edge of each peak column.
+                mixPeakLed.setBounds (mixColumn.removeFromRight (16).withSizeKeepingCentre (10, 16));
+                refPeakLed.setBounds (refColumn.removeFromRight (16).withSizeKeepingCentre (10, 16));
+            }
+
+            mixValueLabels[(size_t) row].setBounds (mixColumn.withTrimmedTop (7));
+            refValueLabels[(size_t) row].setBounds (refColumn.withTrimmedTop (7));
             deltaLabels[(size_t) row].setBounds (rowArea.withTrimmedTop (7));
         }
     }
@@ -489,8 +530,10 @@ void ParityAudioProcessorEditor::resized()
     {
         auto content = masterPanelArea.toNearestInt().reduced (16);
 
-        masterTitleLabel.setBounds (content.removeFromTop (12));
-        content.removeFromTop (12);
+        auto titleRow = content.removeFromTop (14);
+        masterTitleLabel.setBounds (titleRow.removeFromLeft (60));
+        clipLed.setBounds (titleRow.removeFromLeft (18).withSizeKeepingCentre (12, 14));
+        content.removeFromTop (10);
         masterDivider = content.removeFromTop (1).toFloat();
         content.removeFromTop (12);
 
@@ -500,25 +543,23 @@ void ParityAudioProcessorEditor::resized()
 
         auto processorRow = content;
 
-        // Fixed bottom rows: value readouts, then captions.
-        auto captionRow = processorRow.removeFromBottom (13);
-        processorRow.removeFromBottom (8);
-        auto valueRow = processorRow.removeFromBottom (30);
+        // Fixed bottom row: ValueReadout chips (chip + caption inside).
+        auto readoutRow = processorRow.removeFromBottom (40);
         processorRow.removeFromBottom (8);
 
-        // Shared header row: processor name + ON/BYP pill in each column.
-        auto headerRow = processorRow.removeFromTop (14);
+        // Shared header row: processor name + power toggle in each column.
+        auto headerRow = processorRow.removeFromTop (16);
         processorRow.removeFromTop (8);
 
-        constexpr int clipColumnWidth = 92, reductionWidth = 24, faderGap = 4;
+        constexpr int clipColumnWidth = 96, reductionWidth = 26, faderGap = 4;
 
         auto clipHeader = headerRow.removeFromLeft (clipColumnWidth);
-        clipNameLabel.setBounds (clipHeader.removeFromLeft (34));
-        clipPill.setBounds (clipHeader.withTrimmedLeft (4).withWidth (29));
+        clipNameLabel.setBounds (clipHeader.removeFromLeft (36));
+        clipPower.setBounds (clipHeader.withTrimmedLeft (4).withSizeKeepingCentre (30, 14));
 
         auto limitHeader = headerRow.withTrimmedLeft (9);
-        limitNameLabel.setBounds (limitHeader.removeFromLeft (38));
-        limitPill.setBounds (limitHeader.withTrimmedLeft (4).withWidth (29));
+        limitNameLabel.setBounds (limitHeader.removeFromLeft (40));
+        limitPower.setBounds (limitHeader.withTrimmedLeft (4).withSizeKeepingCentre (30, 14));
 
         // CLIP column: fader + GR meter, vertical divider, then LIMIT.
         auto clipColumn = processorRow.removeFromLeft (clipColumnWidth);
@@ -534,7 +575,7 @@ void ParityAudioProcessorEditor::resized()
         auto limitColumn = processorRow;
 
         // Faders fill the remaining height; GR meters sit alongside, same height.
-        clipFader.setBounds (clipColumn.withSizeKeepingCentre (44, clipColumn.getHeight()));
+        clipFader.setBounds (clipColumn.withSizeKeepingCentre (48, clipColumn.getHeight()));
         clipReductionMeter.setBounds (clipReductionArea);
         limitReductionMeter.setBounds (limitReductionArea);
 
@@ -544,22 +585,17 @@ void ParityAudioProcessorEditor::resized()
         for (int i = 0; i < 3; ++i)
             limitSlots[(size_t) i] = limitColumn.removeFromLeft (slotWidth);
 
-        gainFader.setBounds (limitSlots[0].withSizeKeepingCentre (38, limitSlots[0].getHeight()));
-        ceilingFader.setBounds (limitSlots[1].withSizeKeepingCentre (38, limitSlots[1].getHeight()));
-        releaseFader.setBounds (limitSlots[2].withSizeKeepingCentre (38, limitSlots[2].getHeight()));
+        gainFader.setBounds (limitSlots[0].withSizeKeepingCentre (40, limitSlots[0].getHeight()));
+        ceilingFader.setBounds (limitSlots[1].withSizeKeepingCentre (40, limitSlots[1].getHeight()));
+        releaseFader.setBounds (limitSlots[2].withSizeKeepingCentre (40, limitSlots[2].getHeight()));
 
-        // Value + unit + caption labels under each fader.
-        auto placeReadout = [&] (int index, juce::Rectangle<int> column)
-        {
-            faderValueLabels[(size_t) index].setBounds (column.getX(), valueRow.getY(), column.getWidth(), 18);
-            faderUnitLabels[(size_t) index].setBounds (column.getX(), valueRow.getY() + 18, column.getWidth(), 12);
-            faderCaptionLabels[(size_t) index].setBounds (column.getX(), captionRow.getY(), column.getWidth(), 13);
-        };
-
-        placeReadout (0, clipColumn);
+        // ValueReadout chips under each fader column.
+        faderReadouts[0]->setBounds (clipColumn.getX() - 10, readoutRow.getY(),
+                                     clipColumn.getWidth() + 20, 40);
 
         for (int i = 0; i < 3; ++i)
-            placeReadout (i + 1, limitSlots[(size_t) i]);
+            faderReadouts[(size_t) i + 1]->setBounds (limitSlots[(size_t) i].withTrimmedTop (0)
+                                                    .withY (readoutRow.getY()).withHeight (40));
     }
 }
 
@@ -621,9 +657,20 @@ void ParityAudioProcessorEditor::timerCallback()
 
     // Fader meters show each stage's *input* so overshoot past the handle is
     // exactly what the stage removes; GR meters show how much.
+    loudnessHistoryView.setReferenceIntegratedLufs (processorRef.getReferenceFileStats().integratedLufs);
+
+    updateLoudnessLabels();
+    updateStereoLabels();
+}
+
+//==============================================================================
+// 30 Hz meter path — fader levels, GR meters, latching LEDs. Text labels stay
+// on the 10 Hz timer so the animation path never does string work.
+void ParityAudioProcessorEditor::meterTick()
+{
     const auto& chain = processorRef.getMasterChain();
-    const auto clipActive = clipPill.getToggleState();
-    const auto limitActive = limitPill.getToggleState();
+    const auto clipActive = clipPower.getToggleState();
+    const auto limitActive = limitPower.getToggleState();
 
     clipFader.setMeterLevel (chain.getClipInputLevel());
     clipFader.setProcessingActive (clipActive);
@@ -635,11 +682,16 @@ void ParityAudioProcessorEditor::timerCallback()
     limitReductionMeter.setReductionDb (chain.getLimitReductionDb());
     limitReductionMeter.setActive (limitActive);
 
-    loudnessHistoryView.setReferenceIntegratedLufs (processorRef.getReferenceFileStats().integratedLufs);
+    // Latch the master-header LED while the clipper is actually working.
+    if (clipActive && chain.getClipReductionDb() > 0.1f)
+        clipLed.trigger();
 
-    updateLoudnessLabels();
-    updateStereoLabels();
-    updateMasterReadouts();
+    // Latch true-peak LEDs on intersample overs.
+    if (processorRef.getMixLoudness().getTruePeakDb() > -0.1f)
+        mixPeakLed.trigger();
+
+    if (processorRef.getReferenceFileStats().truePeakDb > -0.1f)
+        refPeakLed.trigger();
 }
 
 void ParityAudioProcessorEditor::updateStereoLabels()
@@ -661,7 +713,7 @@ void ParityAudioProcessorEditor::updateStereoLabels()
         auto formatValue = [row, &hasValue] (float value) -> juce::String
         {
             if (! hasValue (value))
-                return "-";
+                return juce::String::fromUTF8 ("\xe2\x80\x94");
 
             return row == 0 ? juce::String (value, 2)
                             : juce::String (value, 1);
@@ -677,7 +729,7 @@ void ParityAudioProcessorEditor::updateStereoLabels()
 
         if (! hasValue (values[row].mix) || ! hasValue (values[row].ref))
         {
-            delta.setText ("-", juce::dontSendNotification);
+            delta.setText (juce::String::fromUTF8 ("\xe2\x80\x94"), juce::dontSendNotification);
             delta.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
         }
         else
@@ -706,7 +758,7 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
     auto format = [] (float value) -> juce::String
     {
         if (value <= LoudnessAnalyzer::silenceLufs + 1.0f)
-            return "-";
+            return juce::String::fromUTF8 ("\xe2\x80\x94");
 
         return juce::String (value, 1);
     };
@@ -743,7 +795,7 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
         if (mixValues[row] <= LoudnessAnalyzer::silenceLufs + 1.0f
          || refValues[row] <= LoudnessAnalyzer::silenceLufs + 1.0f)
         {
-            delta.setText ("-", juce::dontSendNotification);
+            delta.setText (juce::String::fromUTF8 ("\xe2\x80\x94"), juce::dontSendNotification);
             delta.setColour (juce::Label::textColourId, ParityLookAndFeel::inkDim);
         }
         else
@@ -756,26 +808,9 @@ void ParityAudioProcessorEditor::updateLoudnessLabels()
         }
     }
 
-    peakWarningLabel.setText (mix.getTruePeakDb() > 0.0f || fileStats.truePeakDb > 0.0f ? "!" : "",
-                              juce::dontSendNotification);
-
-    if (peakWarningLabel.getText().isNotEmpty())
+    // Red stays for over-ceiling values; the LEDs themselves latch in meterTick.
+    if (mix.getTruePeakDb() > 0.0f || fileStats.truePeakDb > 0.0f)
         repaint();
-}
-
-void ParityAudioProcessorEditor::updateMasterReadouts()
-{
-    auto format = [] (const juce::Slider& fader) -> juce::String
-    {
-        const auto v = fader.getValue();
-        return v < 100.0 ? juce::String (v, 1) : juce::String ((int) std::round (v));
-    };
-
-    for (auto pair : { std::pair<const juce::Slider*, juce::Label*> { &clipFader, &faderValueLabels[0] },
-                       { &gainFader, &faderValueLabels[1] },
-                       { &ceilingFader, &faderValueLabels[2] },
-                       { &releaseFader, &faderValueLabels[3] } })
-        pair.second->setText (format (*pair.first), juce::dontSendNotification);
 }
 
 void ParityAudioProcessorEditor::loadButtonClicked()

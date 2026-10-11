@@ -103,12 +103,20 @@ void SpectrumView::paint (juce::Graphics& g)
     bounds.removeFromRight (40.0f);
     auto plotArea = bounds.withTrimmedBottom (20.0f);
 
+    ParityLookAndFeel::paintRecessed (g, plotArea, 4.0f);
     paintGrid (g, plotArea);
 
-    if (display == Display::overlay)
-        paintOverlay (g, plotArea);
-    else
-        paintDifference (g, plotArea);
+    {
+        juce::Graphics::ScopedSaveState state (g);
+        juce::Path clip;
+        clip.addRoundedRectangle (plotArea.reduced (1.0f), 3.0f);
+        g.reduceClipRegion (clip);
+
+        if (display == Display::overlay)
+            paintOverlay (g, plotArea);
+        else
+            paintDifference (g, plotArea);
+    }
 
     paintHint (g, plotArea);
 }
@@ -118,23 +126,24 @@ void SpectrumView::paintHint (juce::Graphics& g, juce::Rectangle<float> plotArea
     const auto mixHasData = hasData (mix.getMagnitudesDb());
     const auto refHasData = hasData (reference.getMagnitudesDb());
 
-    juce::String hint;
-
     if (! mixHasData && ! refHasData)
-        hint = "Press play in your DAW";
+        ParityLookAndFeel::paintEmptyState (g, plotArea, juce::String::fromUTF8 ("\xe2\x96\xb6"), "Press play in your DAW");
     else if (! refHasData)
-        hint = "Load a reference to compare";
-    else
-        return;
-
-    g.setColour (ParityLookAndFeel::inkDim);
-    g.setFont (ParityLookAndFeel::getFont (12.0f));
-    g.drawText (hint, plotArea, juce::Justification::centred);
+        ParityLookAndFeel::paintEmptyState (g, plotArea.withTrimmedBottom (plotArea.getHeight() * 0.5f),
+                                            "+", "Load a reference to compare");
 }
 
 void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea)
 {
-    g.setFont (ParityLookAndFeel::getFont (10.0f));
+    g.setFont (ParityLookAndFeel::getMonoFont (9.5f));
+
+    // Minor grid: 1-2-5 decades between the labelled lines.
+    g.setColour (ParityLookAndFeel::gridMinor);
+
+    for (auto hz : { 30.0f, 40.0f, 50.0f, 60.0f, 70.0f, 80.0f, 90.0f, 100.0f, 150.0f, 300.0f, 400.0f,
+                     600.0f, 700.0f, 800.0f, 900.0f, 1500.0f, 3000.0f, 4000.0f, 6000.0f, 7000.0f,
+                     8000.0f, 9000.0f, 15000.0f })
+        g.drawVerticalLine ((int) frequencyToX (hz, plotArea), plotArea.getY() + 1.0f, plotArea.getBottom() - 1.0f);
 
     // Labelled octave divisions matching the design.
     for (auto hz : { 20.0f, 200.0f, 500.0f, 1000.0f, 2000.0f, 5000.0f, 10000.0f, 20000.0f })
@@ -142,7 +151,7 @@ void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea
         const auto x = frequencyToX (hz, plotArea);
 
         g.setColour (ParityLookAndFeel::gridLine);
-        g.drawVerticalLine ((int) x, plotArea.getY(), plotArea.getBottom());
+        g.drawVerticalLine ((int) x, plotArea.getY() + 1.0f, plotArea.getBottom() - 1.0f);
 
         const auto label = hz >= 1000.0f ? juce::String ((int) (hz / 1000.0f)) + "k"
                                          : juce::String ((int) hz);
@@ -157,17 +166,21 @@ void SpectrumView::paintGrid (juce::Graphics& g, juce::Rectangle<float> plotArea
 
     if (display == Display::overlay)
     {
-        // 12 dB horizontal lines with right-gutter labels (-12 .. -72).
-        for (float db = -12.0f; db > minDb; db -= 12.0f)
+        // 12 dB horizontal lines with right-gutter labels (-12 .. -72), 6 dB minors.
+        for (float db = -6.0f; db > minDb; db -= 6.0f)
         {
             const auto y = juce::jmap (db, minDb, maxDb, plotArea.getBottom(), plotArea.getY());
+            const auto major = std::fmod (-db, 12.0f) < 0.01f;
 
-            g.setColour (ParityLookAndFeel::gridLine);
-            g.drawHorizontalLine ((int) y, plotArea.getX(), plotArea.getRight());
+            g.setColour (major ? ParityLookAndFeel::gridLine : ParityLookAndFeel::gridMinor);
+            g.drawHorizontalLine ((int) y, plotArea.getX() + 1.0f, plotArea.getRight() - 1.0f);
 
-            g.setColour (ParityLookAndFeel::inkDim);
-            g.drawText (juce::String ((int) db), (int) labelGutter.getX(), (int) y - 6, 30, 12,
-                        juce::Justification::centredLeft);
+            if (major)
+            {
+                g.setColour (ParityLookAndFeel::inkDim);
+                g.drawText (juce::String ((int) db), (int) labelGutter.getX(), (int) y - 6, 30, 12,
+                            juce::Justification::centredLeft);
+            }
         }
 
         g.drawText ("dBFS", (int) labelGutter.getX(), (int) plotArea.getBottom() + 4, 30, 12,
@@ -207,17 +220,19 @@ void SpectrumView::paintOverlay (juce::Graphics& g, juce::Rectangle<float> plotA
             fillPath.lineTo (plotArea.getX(), plotArea.getBottom());
             fillPath.closeSubPath();
 
-            g.setColour (colour.withAlpha (fillAlpha));
+            // Fade the energy fill out towards the floor so curves stay legible when they overlap.
+            juce::ColourGradient fade (colour.withAlpha (fillAlpha), 0.0f, plotArea.getY(),
+                                       colour.withAlpha (fillAlpha * 0.08f), 0.0f, plotArea.getBottom(), false);
+            g.setGradientFill (fade);
             g.fillPath (fillPath);
         }
 
-        g.setColour (colour);
-        g.strokePath (path, juce::PathStrokeType (1.6f));
+        ParityLookAndFeel::strokeWithGlow (g, path, colour, 1.5f, 3.0f, 0.18f);
     };
 
     // Reference behind (orange fill), mix in front (pale fill).
-    paintCurve (reference, ParityLookAndFeel::accent, 0.18f);
-    paintCurve (mix, ParityLookAndFeel::inkSoft, 0.12f);
+    paintCurve (reference, ParityLookAndFeel::accent, 0.30f);
+    paintCurve (mix, ParityLookAndFeel::inkSoft, 0.22f);
 }
 
 void SpectrumView::paintDifference (juce::Graphics& g, juce::Rectangle<float> plotArea)
@@ -274,10 +289,11 @@ void SpectrumView::paintDifference (juce::Graphics& g, juce::Rectangle<float> pl
         fillPath.lineTo (plotArea.getX(), zeroY);
         fillPath.closeSubPath();
 
-        g.setColour (ParityLookAndFeel::accent.withAlpha (0.15f));
+        juce::ColourGradient fade (ParityLookAndFeel::accent.withAlpha (0.28f), 0.0f, plotArea.getY(),
+                                   ParityLookAndFeel::accent.withAlpha (0.05f), 0.0f, plotArea.getBottom(), false);
+        g.setGradientFill (fade);
         g.fillPath (fillPath);
     }
 
-    g.setColour (ParityLookAndFeel::inkSoft);
-    g.strokePath (path, juce::PathStrokeType (1.8f));
+    ParityLookAndFeel::strokeWithGlow (g, path, ParityLookAndFeel::inkSoft, 1.5f, 3.0f, 0.18f);
 }
