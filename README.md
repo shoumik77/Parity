@@ -13,7 +13,12 @@ Instead of constantly switching between your DAW and an external player, Parity 
 ## Demo
 
 
-https://github.com/user-attachments/assets/63f36222-b18c-4c48-803f-9ecd9f808db0
+
+
+https://github.com/user-attachments/assets/4a5b720e-9382-41f7-aa32-ee44604e22f9
+
+
+
 
 **Demo:** Load a reference track, play it in sync with the DAW, switch instantly between MIX and REF, and compare loudness and frequency balance in real time.
 
